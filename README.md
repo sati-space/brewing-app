@@ -9,6 +9,7 @@ This repo currently contains:
 - SQL schema + seed data.
 - Integration tests for key API flows.
 - Alembic migrations and PostgreSQL local setup.
+- JWT auth and user-scoped API access.
 
 ## Why this stack
 
@@ -66,6 +67,14 @@ API docs:
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - Health check: `http://127.0.0.1:8000/api/v1/health`
 
+## Auth endpoints
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/auth/me`
+
+All recipe, batch, and AI endpoints require `Authorization: Bearer <token>`.
+
 ## Running tests
 
 ```bash
@@ -92,7 +101,7 @@ alembic downgrade -1
 
 ## Next build steps
 
-1. Add auth + user profiles.
+1. Add inventory CRUD + low-stock alerts.
 2. Add brew day timeline API and notifications.
 3. Connect an LLM provider for contextual guidance.
 4. Add frontend (recommended: React Native or Blazor Hybrid).

@@ -1,7 +1,16 @@
 -- BrewPilot core schema (PostgreSQL-style SQL)
 
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(40) NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS recipes (
     id SERIAL PRIMARY KEY,
+    owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(140) NOT NULL,
     style VARCHAR(80) NOT NULL DEFAULT 'Unknown',
     target_og NUMERIC(5, 3) NOT NULL,
@@ -26,6 +35,7 @@ CREATE TABLE IF NOT EXISTS recipe_ingredients (
 
 CREATE TABLE IF NOT EXISTS batches (
     id SERIAL PRIMARY KEY,
+    owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     recipe_id INTEGER NOT NULL REFERENCES recipes(id),
     name VARCHAR(140) NOT NULL,
     brewed_on DATE NOT NULL,

@@ -2,8 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import get_current_user
 from app.models.batch import Batch, FermentationReading
 from app.models.recipe import Recipe
+from app.models.user import User
 from app.schemas.ai import (
     FermentationDiagnoseRequest,
     FermentationDiagnoseResponse,
@@ -16,8 +18,19 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 
 
 @router.post("/recipe-optimize", response_model=RecipeOptimizeResponse)
-def optimize_recipe(payload: RecipeOptimizeRequest, db: Session = Depends(get_db)) -> RecipeOptimizeResponse:
-    recipe = db.query(Recipe).filter(Recipe.id == payload.recipe_id).first()
+def optimize_recipe(
+    payload: RecipeOptimizeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecipeOptimizeResponse:
+    recipe = (
+        db.query(Recipe)
+        .filter(
+            Recipe.id == payload.recipe_id,
+            Recipe.owner_user_id == current_user.id,
+        )
+        .first()
+    )
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
@@ -37,8 +50,16 @@ def optimize_recipe(payload: RecipeOptimizeRequest, db: Session = Depends(get_db
 def diagnose_fermentation(
     payload: FermentationDiagnoseRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> FermentationDiagnoseResponse:
-    batch = db.query(Batch).filter(Batch.id == payload.batch_id).first()
+    batch = (
+        db.query(Batch)
+        .filter(
+            Batch.id == payload.batch_id,
+            Batch.owner_user_id == current_user.id,
+        )
+        .first()
+    )
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
 

@@ -12,6 +12,7 @@ class Batch(Base):
     __tablename__ = "batches"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(140), nullable=False)
     brewed_on: Mapped[date] = mapped_column(Date, nullable=False)
@@ -22,6 +23,7 @@ class Batch(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
+    owner: Mapped["User"] = relationship(back_populates="batches")
     readings: Mapped[list["FermentationReading"]] = relationship(
         back_populates="batch",
         cascade="all, delete-orphan",
