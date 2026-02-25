@@ -1,4 +1,8 @@
+INSERT INTO users (username, email, password_hash)
+VALUES ('seed-user', 'seed-user@example.com', 'seed-password-hash');
+
 INSERT INTO recipes (
+    owner_user_id,
     name,
     style,
     target_og,
@@ -9,6 +13,7 @@ INSERT INTO recipes (
     notes
 )
 VALUES (
+    1,
     'West Coast IPA v1',
     '21A',
     1.064,

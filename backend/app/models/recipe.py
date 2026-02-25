@@ -12,6 +12,7 @@ class Recipe(Base):
     __tablename__ = "recipes"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(140), nullable=False)
     style: Mapped[str] = mapped_column(String(80), default="Unknown")
     target_og: Mapped[float] = mapped_column(Float, nullable=False)
@@ -22,6 +23,7 @@ class Recipe(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
+    owner: Mapped["User"] = relationship(back_populates="recipes")
     ingredients: Mapped[list["RecipeIngredient"]] = relationship(
         back_populates="recipe",
         cascade="all, delete-orphan",

@@ -2,8 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import get_current_user
 from app.models.batch import Batch, FermentationReading
 from app.models.recipe import Recipe
+from app.models.user import User
 from app.schemas.batch import (
     BatchCreate,
     BatchRead,
@@ -15,12 +17,24 @@ router = APIRouter(prefix="/batches", tags=["batches"])
 
 
 @router.post("", response_model=BatchRead, status_code=201)
-def create_batch(payload: BatchCreate, db: Session = Depends(get_db)) -> Batch:
-    recipe_exists = db.query(Recipe.id).filter(Recipe.id == payload.recipe_id).first()
+def create_batch(
+    payload: BatchCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Batch:
+    recipe_exists = (
+        db.query(Recipe.id)
+        .filter(
+            Recipe.id == payload.recipe_id,
+            Recipe.owner_user_id == current_user.id,
+        )
+        .first()
+    )
     if not recipe_exists:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     batch = Batch(
+        owner_user_id=current_user.id,
         recipe_id=payload.recipe_id,
         name=payload.name,
         brewed_on=payload.brewed_on,
@@ -37,8 +51,16 @@ def create_batch(payload: BatchCreate, db: Session = Depends(get_db)) -> Batch:
 
 
 @router.get("", response_model=list[BatchRead])
-def list_batches(db: Session = Depends(get_db)) -> list[Batch]:
-    return db.query(Batch).order_by(Batch.created_at.desc()).all()
+def list_batches(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[Batch]:
+    return (
+        db.query(Batch)
+        .filter(Batch.owner_user_id == current_user.id)
+        .order_by(Batch.created_at.desc())
+        .all()
+    )
 
 
 @router.post("/{batch_id}/readings", response_model=FermentationReadingRead, status_code=201)
@@ -46,8 +68,16 @@ def add_fermentation_reading(
     batch_id: int,
     payload: FermentationReadingCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> FermentationReading:
-    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    batch = (
+        db.query(Batch)
+        .filter(
+            Batch.id == batch_id,
+            Batch.owner_user_id == current_user.id,
+        )
+        .first()
+    )
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
 
