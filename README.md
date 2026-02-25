@@ -7,6 +7,8 @@ This repo currently contains:
 - A detailed MVP plan.
 - A Python FastAPI backend scaffold.
 - SQL schema + seed data.
+- Integration tests for key API flows.
+- Alembic migrations and PostgreSQL local setup.
 
 ## Why this stack
 
@@ -20,6 +22,8 @@ This repo currently contains:
 docs/
   mvp-spec.md
 backend/
+  alembic/
+    versions/
   app/
     api/
     core/
@@ -32,13 +36,28 @@ sql/
   seed.sql
 ```
 
-## Quick start (backend)
+## Branch workflow
+
+Use numbered feature branches and avoid direct commits to `main`.
+
+Examples:
+
+- `codex/ba-1`
+- `codex/ba-2`
+- `codex/ba-3`
+
+## Quick start (PostgreSQL + migrations)
 
 ```bash
+# from repo root
+docker compose up -d postgres
+
 cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
@@ -46,6 +65,30 @@ API docs:
 
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - Health check: `http://127.0.0.1:8000/api/v1/health`
+
+## Running tests
+
+```bash
+cd backend
+source .venv/bin/activate
+pytest -q
+```
+
+## Migration commands
+
+```bash
+cd backend
+source .venv/bin/activate
+
+# apply migrations
+alembic upgrade head
+
+# create a new migration after model changes
+alembic revision -m "describe change"
+
+# rollback one migration
+alembic downgrade -1
+```
 
 ## Next build steps
 

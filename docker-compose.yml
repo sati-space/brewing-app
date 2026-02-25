@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: brewpilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: brewpilot
+      POSTGRES_USER: brewpilot
+      POSTGRES_PASSWORD: brewpilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - brewpilot_pgdata:/var/lib/postgresql/data
+
+volumes:
+  brewpilot_pgdata:
