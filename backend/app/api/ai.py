@@ -12,7 +12,7 @@ from app.schemas.ai import (
     RecipeOptimizeRequest,
     RecipeOptimizeResponse,
 )
-from app.services.ai_assistant import BrewAIAssistant
+from app.services import ai_orchestrator
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -34,15 +34,16 @@ def optimize_recipe(
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
-    suggestions = BrewAIAssistant.optimize_recipe(
+    suggestions, source = ai_orchestrator.optimize_recipe(
         recipe=recipe,
         measured_og=payload.measured_og,
         measured_fg=payload.measured_fg,
     )
 
     return RecipeOptimizeResponse(
-        summary=f"Generated {len(suggestions)} recommendation(s) for recipe '{recipe.name}'.",
+        summary=f"Generated {len(suggestions)} recommendation(s) for recipe '{recipe.name}'. Source: {source}.",
         suggestions=suggestions,
+        source=source,
     )
 
 
@@ -64,9 +65,10 @@ def diagnose_fermentation(
         raise HTTPException(status_code=404, detail="Batch not found")
 
     readings = db.query(FermentationReading).filter(FermentationReading.batch_id == batch.id).all()
-    suggestions = BrewAIAssistant.diagnose_fermentation(batch=batch, readings=readings)
+    suggestions, source = ai_orchestrator.diagnose_fermentation(batch=batch, readings=readings)
 
     return FermentationDiagnoseResponse(
-        summary=f"Generated {len(suggestions)} fermentation insight(s) for batch '{batch.name}'.",
+        summary=f"Generated {len(suggestions)} fermentation insight(s) for batch '{batch.name}'. Source: {source}.",
         suggestions=suggestions,
+        source=source,
     )
