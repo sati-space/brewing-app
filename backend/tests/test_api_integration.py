@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi import FastAPI
@@ -12,7 +13,9 @@ from app.api.auth import router as auth_router
 from app.api.batches import router as batch_router
 from app.api.health import router as health_router
 from app.api.inventory import router as inventory_router
+from app.api.notifications import router as notifications_router
 from app.api.recipes import router as recipe_router
+from app.api.timeline import router as timeline_router
 from app.core.config import settings
 from app.core.database import Base, get_db
 
@@ -34,6 +37,8 @@ def client() -> Generator[TestClient, None, None]:
     app.include_router(batch_router, prefix=settings.api_prefix)
     app.include_router(ai_router, prefix=settings.api_prefix)
     app.include_router(inventory_router, prefix=settings.api_prefix)
+    app.include_router(timeline_router, prefix=settings.api_prefix)
+    app.include_router(notifications_router, prefix=settings.api_prefix)
 
     def override_get_db() -> Generator[Session, None, None]:
         db = testing_session_local()
@@ -108,6 +113,24 @@ def _create_recipe(client: TestClient, headers: dict[str, str]) -> int:
     return response.json()["id"]
 
 
+def _create_batch(client: TestClient, headers: dict[str, str], recipe_id: int, name: str, status: str = "fermenting") -> int:
+    response = client.post(
+        "/api/v1/batches",
+        json={
+            "recipe_id": recipe_id,
+            "name": name,
+            "brewed_on": "2026-02-25",
+            "status": status,
+            "volume_liters": 20.0,
+            "measured_og": 1.045,
+            "notes": "Brew day started",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 201
+    return response.json()["id"]
+
+
 def _create_inventory_item(
     client: TestClient,
     headers: dict[str, str],
@@ -127,6 +150,35 @@ def _create_inventory_item(
             "unit": unit,
             "low_stock_threshold": low_stock_threshold,
         },
+        headers=headers,
+    )
+    assert response.status_code == 201
+    return response.json()["id"]
+
+
+def _create_brew_step(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    batch_id: int,
+    step_order: int,
+    name: str,
+    scheduled_for: str | None = None,
+    status: str = "pending",
+) -> int:
+    payload: dict[str, object] = {
+        "step_order": step_order,
+        "name": name,
+        "description": "integration test step",
+        "duration_minutes": 15,
+        "status": status,
+    }
+    if scheduled_for is not None:
+        payload["scheduled_for"] = scheduled_for
+
+    response = client.post(
+        f"/api/v1/batches/{batch_id}/timeline/steps",
+        json=payload,
         headers=headers,
     )
     assert response.status_code == 201
@@ -172,11 +224,9 @@ def test_auth_register_login_and_me(client: TestClient) -> None:
 
 
 def test_protected_endpoints_require_auth(client: TestClient) -> None:
-    list_response = client.get("/api/v1/recipes")
-    assert list_response.status_code == 401
-
-    inventory_response = client.get("/api/v1/inventory")
-    assert inventory_response.status_code == 401
+    assert client.get("/api/v1/recipes").status_code == 401
+    assert client.get("/api/v1/inventory").status_code == 401
+    assert client.get("/api/v1/notifications/upcoming-steps").status_code == 401
 
     create_response = client.post(
         "/api/v1/recipes",
@@ -230,22 +280,7 @@ def test_recipe_flow_and_ai_optimize(client: TestClient) -> None:
 def test_batch_readings_and_ai_diagnose(client: TestClient) -> None:
     headers = _register_and_get_headers(client, username="brewer2", email="brewer2@example.com")
     recipe_id = _create_recipe(client, headers=headers)
-
-    batch_response = client.post(
-        "/api/v1/batches",
-        json={
-            "recipe_id": recipe_id,
-            "name": "Session IPA Batch 1",
-            "brewed_on": "2026-02-25",
-            "status": "fermenting",
-            "volume_liters": 20.0,
-            "measured_og": 1.045,
-            "notes": "Brew day complete",
-        },
-        headers=headers,
-    )
-    assert batch_response.status_code == 201
-    batch_id = batch_response.json()["id"]
+    batch_id = _create_batch(client, headers, recipe_id, "Session IPA Batch 1")
 
     first_reading = client.post(
         f"/api/v1/batches/{batch_id}/readings",
@@ -298,8 +333,7 @@ def test_inventory_crud_and_low_stock_alerts(client: TestClient) -> None:
 
     list_response = client.get("/api/v1/inventory", headers=headers)
     assert list_response.status_code == 200
-    items = list_response.json()
-    assert len(items) == 2
+    assert len(list_response.json()) == 2
 
     low_stock_only = client.get("/api/v1/inventory?low_stock_only=true", headers=headers)
     assert low_stock_only.status_code == 200
@@ -335,9 +369,59 @@ def test_inventory_crud_and_low_stock_alerts(client: TestClient) -> None:
 
     delete_item = client.delete(f"/api/v1/inventory/{healthy_item_id}", headers=headers)
     assert delete_item.status_code == 204
+    assert client.get(f"/api/v1/inventory/{healthy_item_id}", headers=headers).status_code == 404
 
-    deleted_lookup = client.get(f"/api/v1/inventory/{healthy_item_id}", headers=headers)
-    assert deleted_lookup.status_code == 404
+
+def test_timeline_and_upcoming_notifications(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="timeline-user", email="timeline-user@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+    batch_id = _create_batch(client, headers, recipe_id, "Timeline Batch")
+
+    soon_time = (datetime.utcnow() + timedelta(minutes=20)).replace(microsecond=0).isoformat()
+    later_time = (datetime.utcnow() + timedelta(minutes=180)).replace(microsecond=0).isoformat()
+
+    step_a_id = _create_brew_step(
+        client,
+        headers,
+        batch_id=batch_id,
+        step_order=1,
+        name="Heat strike water",
+        scheduled_for=soon_time,
+    )
+    step_b_id = _create_brew_step(
+        client,
+        headers,
+        batch_id=batch_id,
+        step_order=2,
+        name="Mash in",
+        scheduled_for=later_time,
+    )
+
+    list_steps = client.get(f"/api/v1/batches/{batch_id}/timeline/steps", headers=headers)
+    assert list_steps.status_code == 200
+    assert [step["id"] for step in list_steps.json()] == [step_a_id, step_b_id]
+
+    upcoming_60 = client.get("/api/v1/notifications/upcoming-steps?window_minutes=60", headers=headers)
+    assert upcoming_60.status_code == 200
+    body_60 = upcoming_60.json()
+    assert body_60["count"] == 1
+    assert body_60["steps"][0]["id"] == step_a_id
+    assert body_60["steps"][0]["batch_id"] == batch_id
+
+    complete_step = client.patch(
+        f"/api/v1/batches/{batch_id}/timeline/steps/{step_a_id}",
+        json={"status": "completed"},
+        headers=headers,
+    )
+    assert complete_step.status_code == 200
+    assert complete_step.json()["completed_at"] is not None
+
+    upcoming_after_complete = client.get(
+        "/api/v1/notifications/upcoming-steps?window_minutes=60",
+        headers=headers,
+    )
+    assert upcoming_after_complete.status_code == 200
+    assert upcoming_after_complete.json()["count"] == 0
 
 
 def test_user_scope_isolation(client: TestClient) -> None:
@@ -345,6 +429,7 @@ def test_user_scope_isolation(client: TestClient) -> None:
     headers_b = _register_and_get_headers(client, username="owner-b", email="owner-b@example.com")
 
     recipe_id = _create_recipe(client, headers=headers_a)
+    batch_id = _create_batch(client, headers_a, recipe_id, "Owner A Batch")
     inventory_id = _create_inventory_item(
         client,
         headers_a,
@@ -354,13 +439,17 @@ def test_user_scope_isolation(client: TestClient) -> None:
         unit="g",
         low_stock_threshold=60,
     )
+    step_id = _create_brew_step(
+        client,
+        headers_a,
+        batch_id=batch_id,
+        step_order=1,
+        name="Owner A Step",
+        scheduled_for=(datetime.utcnow() + timedelta(minutes=30)).replace(microsecond=0).isoformat(),
+    )
 
-    list_b = client.get("/api/v1/recipes", headers=headers_b)
-    assert list_b.status_code == 200
-    assert list_b.json() == []
-
-    get_b = client.get(f"/api/v1/recipes/{recipe_id}", headers=headers_b)
-    assert get_b.status_code == 404
+    assert client.get("/api/v1/recipes", headers=headers_b).json() == []
+    assert client.get(f"/api/v1/recipes/{recipe_id}", headers=headers_b).status_code == 404
 
     batch_b = client.post(
         "/api/v1/batches",
@@ -376,12 +465,8 @@ def test_user_scope_isolation(client: TestClient) -> None:
     )
     assert batch_b.status_code == 404
 
-    inventory_list_b = client.get("/api/v1/inventory", headers=headers_b)
-    assert inventory_list_b.status_code == 200
-    assert inventory_list_b.json() == []
-
-    inventory_get_b = client.get(f"/api/v1/inventory/{inventory_id}", headers=headers_b)
-    assert inventory_get_b.status_code == 404
+    assert client.get("/api/v1/inventory", headers=headers_b).json() == []
+    assert client.get(f"/api/v1/inventory/{inventory_id}", headers=headers_b).status_code == 404
 
     same_name_for_b = client.post(
         "/api/v1/inventory",
@@ -396,12 +481,22 @@ def test_user_scope_isolation(client: TestClient) -> None:
     )
     assert same_name_for_b.status_code == 201
 
+    assert client.get(f"/api/v1/batches/{batch_id}/timeline/steps", headers=headers_b).status_code == 404
+    assert (
+        client.patch(
+            f"/api/v1/batches/{batch_id}/timeline/steps/{step_id}",
+            json={"status": "completed"},
+            headers=headers_b,
+        ).status_code
+        == 404
+    )
+    assert client.get("/api/v1/notifications/upcoming-steps", headers=headers_b).json()["count"] == 0
+
 
 def test_not_found_cases(client: TestClient) -> None:
     headers = _register_and_get_headers(client, username="brewer3", email="brewer3@example.com")
 
-    missing_recipe = client.get("/api/v1/recipes/9999", headers=headers)
-    assert missing_recipe.status_code == 404
+    assert client.get("/api/v1/recipes/9999", headers=headers).status_code == 404
 
     missing_batch_for_reading = client.post(
         "/api/v1/batches/9999/readings",
@@ -424,5 +519,5 @@ def test_not_found_cases(client: TestClient) -> None:
     )
     assert missing_batch_diagnose.status_code == 404
 
-    missing_inventory = client.get("/api/v1/inventory/9999", headers=headers)
-    assert missing_inventory.status_code == 404
+    assert client.get("/api/v1/inventory/9999", headers=headers).status_code == 404
+    assert client.get("/api/v1/batches/9999/timeline/steps", headers=headers).status_code == 404
