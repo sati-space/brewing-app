@@ -20,3 +20,4 @@ class User(Base):
     recipes: Mapped[list["Recipe"]] = relationship(back_populates="owner")
     batches: Mapped[list["Batch"]] = relationship(back_populates="owner")
     inventory_items: Mapped[list["InventoryItem"]] = relationship(back_populates="owner")
+    brew_steps: Mapped[list["BrewStep"]] = relationship(back_populates="owner")

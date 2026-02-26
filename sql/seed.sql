@@ -32,8 +32,16 @@ VALUES
     (1, 'Citra', 'hop', 50, 'g', 'boil', 10),
     (1, 'US-05', 'yeast', 1, 'pack', 'fermentation', 0);
 
+INSERT INTO batches (owner_user_id, recipe_id, name, brewed_on, status, volume_liters, notes)
+VALUES (1, 1, 'Seed IPA Batch', '2026-02-26', 'brewing', 20.0, 'Sample seeded batch');
+
 INSERT INTO inventory_items (owner_user_id, name, ingredient_type, quantity, unit, low_stock_threshold)
 VALUES
     (1, 'Pale Malt', 'grain', 12.5, 'kg', 3.0),
     (1, 'Citra', 'hop', 180, 'g', 80),
     (1, 'US-05', 'yeast', 3, 'pack', 1);
+
+INSERT INTO brew_steps (batch_id, owner_user_id, step_order, name, description, status)
+VALUES
+    (1, 1, 1, 'Heat strike water', 'Heat water to target mash-in temperature.', 'pending'),
+    (1, 1, 2, 'Mash-in', 'Add grain and maintain mash rest.', 'pending');

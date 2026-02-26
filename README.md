@@ -11,6 +11,7 @@ This repo currently contains:
 - Alembic migrations and PostgreSQL local setup.
 - JWT auth and user-scoped API access.
 - Inventory CRUD and low-stock alert endpoints.
+- Brew day timeline and upcoming-step notification APIs.
 
 ## Why this stack
 
@@ -48,6 +49,7 @@ Examples:
 - `codex/ba-2`
 - `codex/ba-3`
 - `codex/ba-4`
+- `codex/ba-5`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -75,7 +77,7 @@ API docs:
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
 
-All recipe, batch, AI, and inventory endpoints require `Authorization: Bearer <token>`.
+All recipe, batch, AI, inventory, timeline, and notifications endpoints require `Authorization: Bearer <token>`.
 
 ## Inventory endpoints
 
@@ -86,6 +88,13 @@ All recipe, batch, AI, and inventory endpoints require `Authorization: Bearer <t
 - `GET /api/v1/inventory/{item_id}`
 - `PUT /api/v1/inventory/{item_id}`
 - `DELETE /api/v1/inventory/{item_id}`
+
+## Timeline endpoints
+
+- `POST /api/v1/batches/{batch_id}/timeline/steps`
+- `GET /api/v1/batches/{batch_id}/timeline/steps`
+- `PATCH /api/v1/batches/{batch_id}/timeline/steps/{step_id}`
+- `GET /api/v1/notifications/upcoming-steps?window_minutes=120`
 
 ## Running tests
 
@@ -113,7 +122,7 @@ alembic downgrade -1
 
 ## Next build steps
 
-1. Add brew day timeline API and notifications.
-2. Connect an LLM provider for contextual guidance.
-3. Add frontend (recommended: React Native or Blazor Hybrid).
-4. Add observability (request logging, metrics, error tracking).
+1. Connect an LLM provider for contextual guidance.
+2. Add frontend (recommended: React Native or Blazor Hybrid).
+3. Add observability (request logging, metrics, error tracking).
+4. Add brew analytics dashboards (efficiency trends, fermentation variance, repeatability).

@@ -28,6 +28,10 @@ class Batch(Base):
         back_populates="batch",
         cascade="all, delete-orphan",
     )
+    brew_steps: Mapped[list["BrewStep"]] = relationship(
+        back_populates="batch",
+        cascade="all, delete-orphan",
+    )
 
 
 class FermentationReading(Base):

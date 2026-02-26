@@ -68,3 +68,19 @@ CREATE TABLE IF NOT EXISTS inventory_items (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE (owner_user_id, name)
 );
+
+CREATE TABLE IF NOT EXISTS brew_steps (
+    id SERIAL PRIMARY KEY,
+    batch_id INTEGER NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+    owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    step_order INTEGER NOT NULL,
+    name VARCHAR(140) NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    scheduled_for TIMESTAMP,
+    duration_minutes INTEGER,
+    target_temp_c NUMERIC(5, 2),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    completed_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
