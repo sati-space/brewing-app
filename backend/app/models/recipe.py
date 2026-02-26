@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class Recipe(Base):
@@ -23,8 +27,8 @@ class Recipe(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
-    owner: Mapped["User"] = relationship(back_populates="recipes")
-    ingredients: Mapped[list["RecipeIngredient"]] = relationship(
+    owner: Mapped[User] = relationship(back_populates="recipes")
+    ingredients: Mapped[list[RecipeIngredient]] = relationship(
         back_populates="recipe",
         cascade="all, delete-orphan",
     )
@@ -42,4 +46,4 @@ class RecipeIngredient(Base):
     stage: Mapped[str] = mapped_column(String(30), default="boil")
     minute_added: Mapped[int] = mapped_column(default=0)
 
-    recipe: Mapped["Recipe"] = relationship(back_populates="ingredients")
+    recipe: Mapped[Recipe] = relationship(back_populates="ingredients")
