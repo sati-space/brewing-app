@@ -10,6 +10,7 @@ This repo currently contains:
 - Integration tests for key API flows.
 - Alembic migrations and PostgreSQL local setup.
 - JWT auth and user-scoped API access.
+- Inventory CRUD and low-stock alert endpoints.
 
 ## Why this stack
 
@@ -46,6 +47,7 @@ Examples:
 - `codex/ba-1`
 - `codex/ba-2`
 - `codex/ba-3`
+- `codex/ba-4`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -73,7 +75,17 @@ API docs:
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
 
-All recipe, batch, and AI endpoints require `Authorization: Bearer <token>`.
+All recipe, batch, AI, and inventory endpoints require `Authorization: Bearer <token>`.
+
+## Inventory endpoints
+
+- `POST /api/v1/inventory`
+- `GET /api/v1/inventory`
+- `GET /api/v1/inventory?low_stock_only=true`
+- `GET /api/v1/inventory/alerts/low-stock`
+- `GET /api/v1/inventory/{item_id}`
+- `PUT /api/v1/inventory/{item_id}`
+- `DELETE /api/v1/inventory/{item_id}`
 
 ## Running tests
 
@@ -101,7 +113,7 @@ alembic downgrade -1
 
 ## Next build steps
 
-1. Add inventory CRUD + low-stock alerts.
-2. Add brew day timeline API and notifications.
-3. Connect an LLM provider for contextual guidance.
-4. Add frontend (recommended: React Native or Blazor Hybrid).
+1. Add brew day timeline API and notifications.
+2. Connect an LLM provider for contextual guidance.
+3. Add frontend (recommended: React Native or Blazor Hybrid).
+4. Add observability (request logging, metrics, error tracking).

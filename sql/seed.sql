@@ -32,8 +32,8 @@ VALUES
     (1, 'Citra', 'hop', 50, 'g', 'boil', 10),
     (1, 'US-05', 'yeast', 1, 'pack', 'fermentation', 0);
 
-INSERT INTO inventory_items (name, ingredient_type, quantity, unit, low_stock_threshold)
+INSERT INTO inventory_items (owner_user_id, name, ingredient_type, quantity, unit, low_stock_threshold)
 VALUES
-    ('Pale Malt', 'grain', 12.5, 'kg', 3.0),
-    ('Citra', 'hop', 180, 'g', 80),
-    ('US-05', 'yeast', 3, 'pack', 1);
+    (1, 'Pale Malt', 'grain', 12.5, 'kg', 3.0),
+    (1, 'Citra', 'hop', 180, 'g', 80),
+    (1, 'US-05', 'yeast', 3, 'pack', 1);

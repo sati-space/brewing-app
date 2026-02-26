@@ -11,6 +11,7 @@ from app.api.ai import router as ai_router
 from app.api.auth import router as auth_router
 from app.api.batches import router as batch_router
 from app.api.health import router as health_router
+from app.api.inventory import router as inventory_router
 from app.api.recipes import router as recipe_router
 from app.core.config import settings
 from app.core.database import Base, get_db
@@ -32,6 +33,7 @@ def client() -> Generator[TestClient, None, None]:
     app.include_router(recipe_router, prefix=settings.api_prefix)
     app.include_router(batch_router, prefix=settings.api_prefix)
     app.include_router(ai_router, prefix=settings.api_prefix)
+    app.include_router(inventory_router, prefix=settings.api_prefix)
 
     def override_get_db() -> Generator[Session, None, None]:
         db = testing_session_local()
@@ -106,6 +108,31 @@ def _create_recipe(client: TestClient, headers: dict[str, str]) -> int:
     return response.json()["id"]
 
 
+def _create_inventory_item(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    name: str,
+    ingredient_type: str,
+    quantity: float,
+    unit: str,
+    low_stock_threshold: float,
+) -> int:
+    response = client.post(
+        "/api/v1/inventory",
+        json={
+            "name": name,
+            "ingredient_type": ingredient_type,
+            "quantity": quantity,
+            "unit": unit,
+            "low_stock_threshold": low_stock_threshold,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 201
+    return response.json()["id"]
+
+
 def test_health_endpoint(client: TestClient) -> None:
     response = client.get("/api/v1/health")
     assert response.status_code == 200
@@ -147,6 +174,9 @@ def test_auth_register_login_and_me(client: TestClient) -> None:
 def test_protected_endpoints_require_auth(client: TestClient) -> None:
     list_response = client.get("/api/v1/recipes")
     assert list_response.status_code == 401
+
+    inventory_response = client.get("/api/v1/inventory")
+    assert inventory_response.status_code == 401
 
     create_response = client.post(
         "/api/v1/recipes",
@@ -244,11 +274,86 @@ def test_batch_readings_and_ai_diagnose(client: TestClient) -> None:
     assert "pH trend check" in titles
 
 
+def test_inventory_crud_and_low_stock_alerts(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="inventory-user", email="inventory-user@example.com")
+
+    low_item_id = _create_inventory_item(
+        client,
+        headers,
+        name="US-05",
+        ingredient_type="yeast",
+        quantity=1,
+        unit="pack",
+        low_stock_threshold=2,
+    )
+    healthy_item_id = _create_inventory_item(
+        client,
+        headers,
+        name="Citra",
+        ingredient_type="hop",
+        quantity=200,
+        unit="g",
+        low_stock_threshold=50,
+    )
+
+    list_response = client.get("/api/v1/inventory", headers=headers)
+    assert list_response.status_code == 200
+    items = list_response.json()
+    assert len(items) == 2
+
+    low_stock_only = client.get("/api/v1/inventory?low_stock_only=true", headers=headers)
+    assert low_stock_only.status_code == 200
+    assert len(low_stock_only.json()) == 1
+    assert low_stock_only.json()[0]["id"] == low_item_id
+
+    alerts_response = client.get("/api/v1/inventory/alerts/low-stock", headers=headers)
+    assert alerts_response.status_code == 200
+    assert alerts_response.json()["count"] == 1
+    assert alerts_response.json()["items"][0]["name"] == "US-05"
+
+    get_item = client.get(f"/api/v1/inventory/{low_item_id}", headers=headers)
+    assert get_item.status_code == 200
+    assert get_item.json()["is_low_stock"] is True
+
+    update_item = client.put(
+        f"/api/v1/inventory/{low_item_id}",
+        json={
+            "name": "US-05",
+            "ingredient_type": "yeast",
+            "quantity": 3,
+            "unit": "pack",
+            "low_stock_threshold": 2,
+        },
+        headers=headers,
+    )
+    assert update_item.status_code == 200
+    assert update_item.json()["is_low_stock"] is False
+
+    alerts_after_update = client.get("/api/v1/inventory/alerts/low-stock", headers=headers)
+    assert alerts_after_update.status_code == 200
+    assert alerts_after_update.json()["count"] == 0
+
+    delete_item = client.delete(f"/api/v1/inventory/{healthy_item_id}", headers=headers)
+    assert delete_item.status_code == 204
+
+    deleted_lookup = client.get(f"/api/v1/inventory/{healthy_item_id}", headers=headers)
+    assert deleted_lookup.status_code == 404
+
+
 def test_user_scope_isolation(client: TestClient) -> None:
     headers_a = _register_and_get_headers(client, username="owner-a", email="owner-a@example.com")
     headers_b = _register_and_get_headers(client, username="owner-b", email="owner-b@example.com")
 
     recipe_id = _create_recipe(client, headers=headers_a)
+    inventory_id = _create_inventory_item(
+        client,
+        headers_a,
+        name="Citra",
+        ingredient_type="hop",
+        quantity=120,
+        unit="g",
+        low_stock_threshold=60,
+    )
 
     list_b = client.get("/api/v1/recipes", headers=headers_b)
     assert list_b.status_code == 200
@@ -270,6 +375,26 @@ def test_user_scope_isolation(client: TestClient) -> None:
         headers=headers_b,
     )
     assert batch_b.status_code == 404
+
+    inventory_list_b = client.get("/api/v1/inventory", headers=headers_b)
+    assert inventory_list_b.status_code == 200
+    assert inventory_list_b.json() == []
+
+    inventory_get_b = client.get(f"/api/v1/inventory/{inventory_id}", headers=headers_b)
+    assert inventory_get_b.status_code == 404
+
+    same_name_for_b = client.post(
+        "/api/v1/inventory",
+        json={
+            "name": "Citra",
+            "ingredient_type": "hop",
+            "quantity": 80,
+            "unit": "g",
+            "low_stock_threshold": 40,
+        },
+        headers=headers_b,
+    )
+    assert same_name_for_b.status_code == 201
 
 
 def test_not_found_cases(client: TestClient) -> None:
@@ -298,3 +423,6 @@ def test_not_found_cases(client: TestClient) -> None:
         headers=headers,
     )
     assert missing_batch_diagnose.status_code == 404
+
+    missing_inventory = client.get("/api/v1/inventory/9999", headers=headers)
+    assert missing_inventory.status_code == 404

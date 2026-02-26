@@ -59,10 +59,12 @@ CREATE TABLE IF NOT EXISTS fermentation_readings (
 
 CREATE TABLE IF NOT EXISTS inventory_items (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(120) NOT NULL UNIQUE,
+    owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(120) NOT NULL,
     ingredient_type VARCHAR(30) NOT NULL,
     quantity NUMERIC(10, 3) NOT NULL,
     unit VARCHAR(20) NOT NULL,
     low_stock_threshold NUMERIC(10, 3) NOT NULL DEFAULT 0.0,
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE (owner_user_id, name)
 );
