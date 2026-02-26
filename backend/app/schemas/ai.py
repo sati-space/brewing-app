@@ -17,6 +17,7 @@ class RecipeOptimizeRequest(BaseModel):
 class RecipeOptimizeResponse(BaseModel):
     summary: str
     suggestions: list[AISuggestion]
+    source: str = Field(default="rules")
 
 
 class FermentationDiagnoseRequest(BaseModel):
@@ -26,3 +27,4 @@ class FermentationDiagnoseRequest(BaseModel):
 class FermentationDiagnoseResponse(BaseModel):
     summary: str
     suggestions: list[AISuggestion]
+    source: str = Field(default="rules")

@@ -12,6 +12,7 @@ This repo currently contains:
 - JWT auth and user-scoped API access.
 - Inventory CRUD and low-stock alert endpoints.
 - Brew day timeline and upcoming-step notification APIs.
+- Optional LLM-backed AI suggestions with rule-based fallback.
 
 ## Why this stack
 
@@ -50,6 +51,7 @@ Examples:
 - `codex/ba-3`
 - `codex/ba-4`
 - `codex/ba-5`
+- `codex/ba-6`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -78,6 +80,31 @@ API docs:
 - `GET /api/v1/auth/me`
 
 All recipe, batch, AI, inventory, timeline, and notifications endpoints require `Authorization: Bearer <token>`.
+
+## AI endpoints
+
+- `POST /api/v1/ai/recipe-optimize`
+- `POST /api/v1/ai/fermentation-diagnose`
+
+Response payloads include `source`:
+
+- `rules` (deterministic rules engine)
+- `llm` (LLM provider response)
+- `llm_fallback` (LLM failed/unavailable, rules returned)
+
+## LLM provider config
+
+Set in `backend/.env`:
+
+- `AI_PROVIDER`:
+  - `rules` (default)
+  - `llm` (enable provider calls)
+- `AI_LLM_BASE_URL` (example: `https://api.openai.com`)
+- `AI_LLM_API_KEY`
+- `AI_LLM_MODEL`
+- `AI_LLM_TIMEOUT_SECONDS`
+
+The adapter uses an OpenAI-compatible `POST /v1/chat/completions` interface.
 
 ## Inventory endpoints
 
@@ -122,7 +149,7 @@ alembic downgrade -1
 
 ## Next build steps
 
-1. Connect an LLM provider for contextual guidance.
-2. Add frontend (recommended: React Native or Blazor Hybrid).
-3. Add observability (request logging, metrics, error tracking).
-4. Add brew analytics dashboards (efficiency trends, fermentation variance, repeatability).
+1. Add frontend (recommended: React Native or Blazor Hybrid).
+2. Add observability (request logging, metrics, error tracking).
+3. Add brew analytics dashboards (efficiency trends, fermentation variance, repeatability).
+4. Add device/sensor integrations for automated readings.

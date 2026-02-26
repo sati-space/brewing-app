@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     password_hash_iterations: int = 120000
 
+    ai_provider: str = "rules"
+    ai_llm_base_url: str | None = None
+    ai_llm_api_key: str | None = None
+    ai_llm_model: str | None = None
+    ai_llm_timeout_seconds: int = 20
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
