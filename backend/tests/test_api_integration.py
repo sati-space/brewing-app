@@ -14,14 +14,20 @@ from app.api.batches import router as batch_router
 from app.api.health import router as health_router
 from app.api.inventory import router as inventory_router
 from app.api.notifications import router as notifications_router
+from app.api.observability import router as observability_router
 from app.api.recipes import router as recipe_router
 from app.api.timeline import router as timeline_router
 from app.core.config import settings
 from app.core.database import Base, get_db
+from app.core.observability_middleware import ObservabilityMiddleware
+from app.services import ai_orchestrator
+from app.services.observability import observability_tracker
 
 
 @pytest.fixture
 def client() -> Generator[TestClient, None, None]:
+    observability_tracker.reset()
+
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -31,6 +37,8 @@ def client() -> Generator[TestClient, None, None]:
     Base.metadata.create_all(bind=engine)
 
     app = FastAPI(title="BrewPilot API - Test")
+    app.add_middleware(ObservabilityMiddleware)
+
     app.include_router(health_router, prefix=settings.api_prefix)
     app.include_router(auth_router, prefix=settings.api_prefix)
     app.include_router(recipe_router, prefix=settings.api_prefix)
@@ -39,6 +47,7 @@ def client() -> Generator[TestClient, None, None]:
     app.include_router(inventory_router, prefix=settings.api_prefix)
     app.include_router(timeline_router, prefix=settings.api_prefix)
     app.include_router(notifications_router, prefix=settings.api_prefix)
+    app.include_router(observability_router, prefix=settings.api_prefix)
 
     def override_get_db() -> Generator[Session, None, None]:
         db = testing_session_local()
@@ -54,6 +63,7 @@ def client() -> Generator[TestClient, None, None]:
 
     app.dependency_overrides.clear()
     Base.metadata.drop_all(bind=engine)
+    observability_tracker.reset()
 
 
 def _register_and_get_headers(
@@ -227,6 +237,7 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/recipes").status_code == 401
     assert client.get("/api/v1/inventory").status_code == 401
     assert client.get("/api/v1/notifications/upcoming-steps").status_code == 401
+    assert client.get("/api/v1/observability/metrics").status_code == 401
 
     create_response = client.post(
         "/api/v1/recipes",
@@ -243,6 +254,52 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
         },
     )
     assert create_response.status_code == 401
+
+
+def test_observability_metrics_endpoint(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="metrics-user", email="metrics-user@example.com")
+    _ = _create_recipe(client, headers=headers)
+    _ = client.get("/api/v1/recipes", headers=headers)
+
+    metrics_response = client.get("/api/v1/observability/metrics", headers=headers)
+    assert metrics_response.status_code == 200
+    body = metrics_response.json()
+
+    assert body["total_requests"] >= 3
+    assert "generated_at" in body
+    assert "uptime_seconds" in body
+
+    route_keys = {(item["method"], item["path"]) for item in body["routes"]}
+    assert ("POST", "/api/v1/recipes") in route_keys
+    assert ("GET", "/api/v1/recipes") in route_keys
+
+
+def test_observability_tracks_server_errors(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    headers = _register_and_get_headers(client, username="error-user", email="error-user@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+
+    def explode(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("forced failure")
+
+    monkeypatch.setattr(ai_orchestrator, "optimize_recipe", explode)
+
+    response = client.post(
+        "/api/v1/ai/recipe-optimize",
+        json={
+            "recipe_id": recipe_id,
+            "measured_og": 1.038,
+            "measured_fg": 1.016,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Internal server error"
+    assert response.json().get("request_id")
+
+    metrics_response = client.get("/api/v1/observability/metrics", headers=headers)
+    assert metrics_response.status_code == 200
+    body = metrics_response.json()
+    assert body["total_server_errors"] >= 1
 
 
 def test_recipe_flow_and_ai_optimize(client: TestClient) -> None:
@@ -275,6 +332,7 @@ def test_recipe_flow_and_ai_optimize(client: TestClient) -> None:
     titles = {item["title"] for item in body["suggestions"]}
     assert "Raise mash efficiency" in titles
     assert "Improve attenuation" in titles
+    assert body["source"] in {"rules", "llm", "llm_fallback"}
 
 
 def test_batch_readings_and_ai_diagnose(client: TestClient) -> None:
@@ -307,6 +365,7 @@ def test_batch_readings_and_ai_diagnose(client: TestClient) -> None:
     assert "Potential stalled fermentation" in titles
     assert "Fermentation temperature high" in titles
     assert "pH trend check" in titles
+    assert body["source"] in {"rules", "llm", "llm_fallback"}
 
 
 def test_inventory_crud_and_low_stock_alerts(client: TestClient) -> None:
@@ -375,7 +434,7 @@ def test_inventory_crud_and_low_stock_alerts(client: TestClient) -> None:
 def test_timeline_and_upcoming_notifications(client: TestClient) -> None:
     headers = _register_and_get_headers(client, username="timeline-user", email="timeline-user@example.com")
     recipe_id = _create_recipe(client, headers=headers)
-    batch_id = _create_batch(client, headers, recipe_id, "Timeline Batch")
+    batch_id = _create_batch(client, headers, recipe_id, "Timeline Batch", status="brewing")
 
     soon_time = (datetime.utcnow() + timedelta(minutes=20)).replace(microsecond=0).isoformat()
     later_time = (datetime.utcnow() + timedelta(minutes=180)).replace(microsecond=0).isoformat()
@@ -429,7 +488,7 @@ def test_user_scope_isolation(client: TestClient) -> None:
     headers_b = _register_and_get_headers(client, username="owner-b", email="owner-b@example.com")
 
     recipe_id = _create_recipe(client, headers=headers_a)
-    batch_id = _create_batch(client, headers_a, recipe_id, "Owner A Batch")
+    batch_id = _create_batch(client, headers_a, recipe_id, "Owner A Batch", status="brewing")
     inventory_id = _create_inventory_item(
         client,
         headers_a,
