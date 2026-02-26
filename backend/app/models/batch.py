@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.models.brew_step import BrewStep
+    from app.models.user import User
 
 
 class Batch(Base):
@@ -23,12 +28,12 @@ class Batch(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
-    owner: Mapped["User"] = relationship(back_populates="batches")
-    readings: Mapped[list["FermentationReading"]] = relationship(
+    owner: Mapped[User] = relationship(back_populates="batches")
+    readings: Mapped[list[FermentationReading]] = relationship(
         back_populates="batch",
         cascade="all, delete-orphan",
     )
-    brew_steps: Mapped[list["BrewStep"]] = relationship(
+    brew_steps: Mapped[list[BrewStep]] = relationship(
         back_populates="batch",
         cascade="all, delete-orphan",
     )
@@ -45,4 +50,4 @@ class FermentationReading(Base):
     ph: Mapped[float | None] = mapped_column(Float, nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
 
-    batch: Mapped["Batch"] = relationship(back_populates="readings")
+    batch: Mapped[Batch] = relationship(back_populates="readings")
