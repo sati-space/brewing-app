@@ -54,6 +54,8 @@ Examples:
 - `codex/ba-5`
 - `codex/ba-6`
 - `codex/ba-7`
+- `codex/ba-8`
+- `codex/ba-9`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -81,7 +83,7 @@ API docs:
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
 
-All recipe, batch, AI, inventory, timeline, notifications, and observability endpoints require `Authorization: Bearer <token>` except `GET /api/v1/health`.
+All recipe, batch, analytics, AI, inventory, timeline, notifications, and observability endpoints require `Authorization: Bearer <token>` except `GET /api/v1/health`.
 
 ## AI endpoints
 
@@ -117,6 +119,10 @@ The adapter uses an OpenAI-compatible `POST /v1/chat/completions` interface.
 - `GET /api/v1/inventory/{item_id}`
 - `PUT /api/v1/inventory/{item_id}`
 - `DELETE /api/v1/inventory/{item_id}`
+
+## Analytics endpoint
+
+- `GET /api/v1/analytics/overview`
 
 ## Timeline endpoints
 

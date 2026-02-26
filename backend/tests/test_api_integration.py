@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.ai import router as ai_router
+from app.api.analytics import router as analytics_router
 from app.api.auth import router as auth_router
 from app.api.batches import router as batch_router
 from app.api.health import router as health_router
@@ -43,6 +44,7 @@ def client() -> Generator[TestClient, None, None]:
     app.include_router(auth_router, prefix=settings.api_prefix)
     app.include_router(recipe_router, prefix=settings.api_prefix)
     app.include_router(batch_router, prefix=settings.api_prefix)
+    app.include_router(analytics_router, prefix=settings.api_prefix)
     app.include_router(ai_router, prefix=settings.api_prefix)
     app.include_router(inventory_router, prefix=settings.api_prefix)
     app.include_router(timeline_router, prefix=settings.api_prefix)
@@ -238,6 +240,7 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/inventory").status_code == 401
     assert client.get("/api/v1/notifications/upcoming-steps").status_code == 401
     assert client.get("/api/v1/observability/metrics").status_code == 401
+    assert client.get("/api/v1/analytics/overview").status_code == 401
 
     create_response = client.post(
         "/api/v1/recipes",
@@ -580,3 +583,157 @@ def test_not_found_cases(client: TestClient) -> None:
 
     assert client.get("/api/v1/inventory/9999", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/timeline/steps", headers=headers).status_code == 404
+
+
+def test_analytics_overview_defaults_when_empty(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="analytics-empty", email="analytics-empty@example.com")
+
+    response = client.get("/api/v1/analytics/overview", headers=headers)
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["total_recipes"] == 0
+    assert body["total_batches"] == 0
+    assert body["completed_batches"] == 0
+    assert body["average_abv"] is None
+    assert body["average_attenuation_pct"] is None
+    assert body["style_breakdown"] == []
+    assert body["recent_batches"] == []
+
+
+def test_analytics_overview_user_scoped_metrics(client: TestClient) -> None:
+    headers_a = _register_and_get_headers(client, username="analytics-a", email="analytics-a@example.com")
+    headers_b = _register_and_get_headers(client, username="analytics-b", email="analytics-b@example.com")
+
+    recipe_a_ipa = client.post(
+        "/api/v1/recipes",
+        json={
+            "name": "A IPA",
+            "style": "IPA",
+            "target_og": 1.050,
+            "target_fg": 1.011,
+            "target_ibu": 45,
+            "target_srm": 6,
+            "efficiency_pct": 74,
+            "notes": "",
+            "ingredients": [],
+        },
+        headers=headers_a,
+    )
+    assert recipe_a_ipa.status_code == 201
+    recipe_a_ipa_id = recipe_a_ipa.json()["id"]
+
+    recipe_a_stout = client.post(
+        "/api/v1/recipes",
+        json={
+            "name": "A Stout",
+            "style": "Stout",
+            "target_og": 1.060,
+            "target_fg": 1.016,
+            "target_ibu": 35,
+            "target_srm": 30,
+            "efficiency_pct": 70,
+            "notes": "",
+            "ingredients": [],
+        },
+        headers=headers_a,
+    )
+    assert recipe_a_stout.status_code == 201
+    recipe_a_stout_id = recipe_a_stout.json()["id"]
+
+    batch_a_1 = client.post(
+        "/api/v1/batches",
+        json={
+            "recipe_id": recipe_a_ipa_id,
+            "name": "A Batch IPA 1",
+            "brewed_on": "2026-02-20",
+            "status": "completed",
+            "volume_liters": 20.0,
+            "measured_og": 1.050,
+            "measured_fg": 1.010,
+            "notes": "",
+        },
+        headers=headers_a,
+    )
+    assert batch_a_1.status_code == 201
+
+    batch_a_2 = client.post(
+        "/api/v1/batches",
+        json={
+            "recipe_id": recipe_a_stout_id,
+            "name": "A Batch Stout",
+            "brewed_on": "2026-02-21",
+            "status": "packaged",
+            "volume_liters": 19.0,
+            "measured_og": 1.060,
+            "measured_fg": 1.015,
+            "notes": "",
+        },
+        headers=headers_a,
+    )
+    assert batch_a_2.status_code == 201
+
+    batch_a_3 = client.post(
+        "/api/v1/batches",
+        json={
+            "recipe_id": recipe_a_ipa_id,
+            "name": "A Batch IPA 2",
+            "brewed_on": "2026-02-22",
+            "status": "fermenting",
+            "volume_liters": 20.0,
+            "measured_og": 1.048,
+            "notes": "",
+        },
+        headers=headers_a,
+    )
+    assert batch_a_3.status_code == 201
+
+    recipe_b = client.post(
+        "/api/v1/recipes",
+        json={
+            "name": "B Lager",
+            "style": "Lager",
+            "target_og": 1.047,
+            "target_fg": 1.010,
+            "target_ibu": 22,
+            "target_srm": 4,
+            "efficiency_pct": 68,
+            "notes": "",
+            "ingredients": [],
+        },
+        headers=headers_b,
+    )
+    assert recipe_b.status_code == 201
+    recipe_b_id = recipe_b.json()["id"]
+
+    batch_b = client.post(
+        "/api/v1/batches",
+        json={
+            "recipe_id": recipe_b_id,
+            "name": "B Batch",
+            "brewed_on": "2026-02-23",
+            "status": "completed",
+            "volume_liters": 20.0,
+            "measured_og": 1.047,
+            "measured_fg": 1.011,
+            "notes": "",
+        },
+        headers=headers_b,
+    )
+    assert batch_b.status_code == 201
+
+    response = client.get("/api/v1/analytics/overview", headers=headers_a)
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["total_recipes"] == 2
+    assert body["total_batches"] == 3
+    assert body["completed_batches"] == 2
+    assert body["average_abv"] == 5.58
+    assert body["average_attenuation_pct"] == 77.5
+
+    style_counts = {item["style"]: item["batch_count"] for item in body["style_breakdown"]}
+    assert style_counts == {"IPA": 2, "Stout": 1}
+
+    recent_names = [item["name"] for item in body["recent_batches"]]
+    assert recent_names == ["A Batch IPA 2", "A Batch Stout", "A Batch IPA 1"]
