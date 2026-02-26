@@ -13,6 +13,7 @@ This repo currently contains:
 - Inventory CRUD and low-stock alert endpoints.
 - Brew day timeline and upcoming-step notification APIs.
 - Optional LLM-backed AI suggestions with rule-based fallback.
+- Observability middleware with request logs, error handling, and metrics.
 
 ## Why this stack
 
@@ -52,6 +53,7 @@ Examples:
 - `codex/ba-4`
 - `codex/ba-5`
 - `codex/ba-6`
+- `codex/ba-7`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -79,7 +81,7 @@ API docs:
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
 
-All recipe, batch, AI, inventory, timeline, and notifications endpoints require `Authorization: Bearer <token>`.
+All recipe, batch, AI, inventory, timeline, notifications, and observability endpoints require `Authorization: Bearer <token>` except `GET /api/v1/health`.
 
 ## AI endpoints
 
@@ -123,6 +125,12 @@ The adapter uses an OpenAI-compatible `POST /v1/chat/completions` interface.
 - `PATCH /api/v1/batches/{batch_id}/timeline/steps/{step_id}`
 - `GET /api/v1/notifications/upcoming-steps?window_minutes=120`
 
+## Observability endpoint
+
+- `GET /api/v1/observability/metrics`
+
+Request middleware adds `X-Request-ID` response headers, structured request logs, and captures unhandled exceptions as `500` responses with `request_id` in body.
+
 ## Running tests
 
 ```bash
@@ -150,6 +158,6 @@ alembic downgrade -1
 ## Next build steps
 
 1. Add frontend (recommended: React Native or Blazor Hybrid).
-2. Add observability (request logging, metrics, error tracking).
-3. Add brew analytics dashboards (efficiency trends, fermentation variance, repeatability).
-4. Add device/sensor integrations for automated readings.
+2. Add brew analytics dashboards (efficiency trends, fermentation variance, repeatability).
+3. Add device/sensor integrations for automated readings.
+4. Add CI pipeline for lint/test/migration checks.
