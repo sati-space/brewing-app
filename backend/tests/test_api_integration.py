@@ -14,6 +14,7 @@ from app.api.auth import router as auth_router
 from app.api.batches import router as batch_router
 from app.api.health import router as health_router
 from app.api.imports import router as imports_router
+from app.api.ingredients import router as ingredients_router
 from app.api.inventory import router as inventory_router
 from app.api.notifications import router as notifications_router
 from app.api.observability import router as observability_router
@@ -48,6 +49,7 @@ def client() -> Generator[TestClient, None, None]:
     app.include_router(analytics_router, prefix=settings.api_prefix)
     app.include_router(ai_router, prefix=settings.api_prefix)
     app.include_router(imports_router, prefix=settings.api_prefix)
+    app.include_router(ingredients_router, prefix=settings.api_prefix)
     app.include_router(inventory_router, prefix=settings.api_prefix)
     app.include_router(timeline_router, prefix=settings.api_prefix)
     app.include_router(notifications_router, prefix=settings.api_prefix)
@@ -245,6 +247,10 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/analytics/overview").status_code == 401
     assert client.get("/api/v1/imports/recipes/catalog").status_code == 401
     assert client.post("/api/v1/imports/recipes/import").status_code == 401
+    assert client.get("/api/v1/imports/ingredients/catalog").status_code == 401
+    assert client.post("/api/v1/imports/ingredients/import").status_code == 401
+    assert client.get("/api/v1/ingredients").status_code == 401
+    assert client.post("/api/v1/ingredients").status_code == 401
     assert client.get("/api/v1/batches/1/recipe-snapshot").status_code == 401
     assert client.get("/api/v1/batches/1/inventory/preview").status_code == 401
     assert client.post("/api/v1/batches/1/inventory/consume").status_code == 401
@@ -595,6 +601,7 @@ def test_not_found_cases(client: TestClient) -> None:
     assert missing_batch_diagnose.status_code == 404
 
     assert client.get("/api/v1/inventory/9999", headers=headers).status_code == 404
+    assert client.get("/api/v1/ingredients/9999", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/recipe-snapshot", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/inventory/preview", headers=headers).status_code == 404
     assert client.post("/api/v1/batches/9999/inventory/consume", headers=headers).status_code == 404
@@ -1021,5 +1028,142 @@ def test_external_import_not_found_cases(client: TestClient) -> None:
     )
     assert missing_equipment.status_code == 404
 
+    missing_ingredient = client.post(
+        "/api/v1/imports/ingredients/import",
+        json={"provider": "missing", "external_id": "x"},
+        headers=headers,
+    )
+    assert missing_ingredient.status_code == 404
+
     missing_equipment_profile = client.get("/api/v1/imports/equipment/9999", headers=headers)
     assert missing_equipment_profile.status_code == 404
+
+
+def test_ingredients_crud_flow(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="ingredient-user", email="ingredient-user@example.com")
+
+    create_response = client.post(
+        "/api/v1/ingredients",
+        json={
+            "name": "Centennial",
+            "ingredient_type": "hop",
+            "default_unit": "g",
+            "notes": "Citrus-forward hop",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+    ingredient = create_response.json()
+    ingredient_id = ingredient["id"]
+    assert ingredient["name"] == "Centennial"
+
+    duplicate_create = client.post(
+        "/api/v1/ingredients",
+        json={
+            "name": "Centennial",
+            "ingredient_type": "hop",
+            "default_unit": "g",
+            "notes": "Duplicate",
+        },
+        headers=headers,
+    )
+    assert duplicate_create.status_code == 409
+
+    list_response = client.get("/api/v1/ingredients", headers=headers)
+    assert list_response.status_code == 200
+    assert len(list_response.json()) == 1
+
+    filtered = client.get("/api/v1/ingredients?ingredient_type=hop&search=Cent", headers=headers)
+    assert filtered.status_code == 200
+    assert len(filtered.json()) == 1
+
+    update_response = client.put(
+        f"/api/v1/ingredients/{ingredient_id}",
+        json={
+            "name": "Centennial T90",
+            "ingredient_type": "hop",
+            "default_unit": "g",
+            "notes": "Pellet hop",
+        },
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["name"] == "Centennial T90"
+
+    get_response = client.get(f"/api/v1/ingredients/{ingredient_id}", headers=headers)
+    assert get_response.status_code == 200
+    assert get_response.json()["default_unit"] == "g"
+
+    delete_response = client.delete(f"/api/v1/ingredients/{ingredient_id}", headers=headers)
+    assert delete_response.status_code == 204
+
+    missing_after_delete = client.get(f"/api/v1/ingredients/{ingredient_id}", headers=headers)
+    assert missing_after_delete.status_code == 404
+
+
+
+def test_ingredients_user_scope_isolation(client: TestClient) -> None:
+    headers_a = _register_and_get_headers(client, username="ingredient-owner-a", email="ingredient-owner-a@example.com")
+    headers_b = _register_and_get_headers(client, username="ingredient-owner-b", email="ingredient-owner-b@example.com")
+
+    create_response = client.post(
+        "/api/v1/ingredients",
+        json={
+            "name": "Pilsner Malt",
+            "ingredient_type": "grain",
+            "default_unit": "kg",
+            "notes": "Base malt",
+        },
+        headers=headers_a,
+    )
+    assert create_response.status_code == 201
+    ingredient_id = create_response.json()["id"]
+
+    assert client.get(f"/api/v1/ingredients/{ingredient_id}", headers=headers_b).status_code == 404
+    assert client.put(
+        f"/api/v1/ingredients/{ingredient_id}",
+        json={
+            "name": "Pilsner Malt",
+            "ingredient_type": "grain",
+            "default_unit": "kg",
+            "notes": "attempt",
+        },
+        headers=headers_b,
+    ).status_code == 404
+    assert client.delete(f"/api/v1/ingredients/{ingredient_id}", headers=headers_b).status_code == 404
+
+
+
+def test_external_ingredient_catalog_and_import_flow(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="ingredient-import-user", email="ingredient-import-user@example.com")
+
+    catalog_response = client.get("/api/v1/imports/ingredients/catalog?ingredient_type=hop", headers=headers)
+    assert catalog_response.status_code == 200
+    catalog = catalog_response.json()
+    assert catalog["count"] >= 1
+    assert all(item["ingredient_type"] == "hop" for item in catalog["items"])
+
+    item = catalog["items"][0]
+
+    import_response = client.post(
+        "/api/v1/imports/ingredients/import",
+        json={"provider": item["provider"], "external_id": item["external_id"]},
+        headers=headers,
+    )
+    assert import_response.status_code == 201
+    imported = import_response.json()
+    assert imported["provider"] == item["provider"]
+    assert imported["external_id"] == item["external_id"]
+    assert imported["ingredient_profile"]["name"] == item["name"]
+
+    ingredients_response = client.get("/api/v1/ingredients", headers=headers)
+    assert ingredients_response.status_code == 200
+    names = {profile["name"] for profile in ingredients_response.json()}
+    assert item["name"] in names
+
+    duplicate_import = client.post(
+        "/api/v1/imports/ingredients/import",
+        json={"provider": item["provider"], "external_id": item["external_id"]},
+        headers=headers,
+    )
+    assert duplicate_import.status_code == 409

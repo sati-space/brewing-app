@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.equipment_profile import EquipmentProfile
+from app.models.ingredient_profile import IngredientProfile
 from app.models.recipe import Recipe, RecipeIngredient
 from app.models.user import User
 from app.schemas.imports import (
@@ -12,17 +13,23 @@ from app.schemas.imports import (
     ExternalEquipmentCatalogItemRead,
     ExternalEquipmentCatalogResponse,
     ExternalImportRequest,
+    ExternalIngredientCatalogItemRead,
+    ExternalIngredientCatalogResponse,
     ExternalRecipeCatalogIngredientRead,
     ExternalRecipeCatalogItemRead,
     ExternalRecipeCatalogResponse,
+    IngredientImportResultRead,
     RecipeImportResultRead,
 )
 from app.services.external_catalog import (
     ExternalEquipmentTemplate,
+    ExternalIngredientTemplate,
     ExternalRecipeTemplate,
     get_equipment_template,
+    get_ingredient_template,
     get_recipe_template,
     list_equipment_templates,
+    list_ingredient_templates,
     list_recipe_templates,
 )
 
@@ -68,6 +75,17 @@ def _to_equipment_catalog_item(template: ExternalEquipmentTemplate) -> ExternalE
         brewhouse_efficiency_pct=template.brewhouse_efficiency_pct,
         boil_off_rate_l_per_hour=template.boil_off_rate_l_per_hour,
         trub_loss_liters=template.trub_loss_liters,
+        notes=template.notes,
+    )
+
+
+def _to_ingredient_catalog_item(template: ExternalIngredientTemplate) -> ExternalIngredientCatalogItemRead:
+    return ExternalIngredientCatalogItemRead(
+        provider=template.provider,
+        external_id=template.external_id,
+        name=template.name,
+        ingredient_type=template.ingredient_type,
+        default_unit=template.default_unit,
         notes=template.notes,
     )
 
@@ -218,3 +236,70 @@ def get_imported_equipment_profile(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipment profile not found")
 
     return equipment_profile
+
+
+@router.get("/ingredients/catalog", response_model=ExternalIngredientCatalogResponse)
+def list_ingredient_catalog(
+    provider: str | None = Query(default=None),
+    ingredient_type: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    _: User = Depends(get_current_user),
+) -> ExternalIngredientCatalogResponse:
+    templates = list_ingredient_templates(provider=provider, ingredient_type=ingredient_type, search=search)
+    items = [_to_ingredient_catalog_item(template) for template in templates]
+    return ExternalIngredientCatalogResponse(count=len(items), items=items)
+
+
+@router.post("/ingredients/import", response_model=IngredientImportResultRead, status_code=status.HTTP_201_CREATED)
+def import_ingredient_profile(
+    payload: ExternalImportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> IngredientImportResultRead:
+    template = get_ingredient_template(provider=payload.provider, external_id=payload.external_id)
+    if template is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="External ingredient not found")
+
+    existing_source = (
+        db.query(IngredientProfile)
+        .filter(
+            IngredientProfile.owner_user_id == current_user.id,
+            IngredientProfile.source_provider == template.provider,
+            IngredientProfile.source_external_id == template.external_id,
+        )
+        .first()
+    )
+    if existing_source:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ingredient profile already imported")
+
+    existing_name_type = (
+        db.query(IngredientProfile)
+        .filter(
+            IngredientProfile.owner_user_id == current_user.id,
+            IngredientProfile.name == template.name,
+            IngredientProfile.ingredient_type == template.ingredient_type,
+        )
+        .first()
+    )
+    if existing_name_type:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ingredient profile already exists")
+
+    ingredient_profile = IngredientProfile(
+        owner_user_id=current_user.id,
+        source_provider=template.provider,
+        source_external_id=template.external_id,
+        name=template.name,
+        ingredient_type=template.ingredient_type,
+        default_unit=template.default_unit,
+        notes=template.notes,
+    )
+
+    db.add(ingredient_profile)
+    db.commit()
+    db.refresh(ingredient_profile)
+
+    return IngredientImportResultRead(
+        provider=template.provider,
+        external_id=template.external_id,
+        ingredient_profile=ingredient_profile,
+    )

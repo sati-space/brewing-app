@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.models.batch import Batch
     from app.models.brew_step import BrewStep
     from app.models.equipment_profile import EquipmentProfile
+    from app.models.ingredient_profile import IngredientProfile
     from app.models.inventory import InventoryItem
     from app.models.recipe import Recipe
 
@@ -30,3 +31,4 @@ class User(Base):
     inventory_items: Mapped[list[InventoryItem]] = relationship(back_populates="owner")
     brew_steps: Mapped[list[BrewStep]] = relationship(back_populates="owner")
     equipment_profiles: Mapped[list[EquipmentProfile]] = relationship(back_populates="owner")
+    ingredient_profiles: Mapped[list[IngredientProfile]] = relationship(back_populates="owner")

@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.ingredients import IngredientProfileRead
+
 
 class ExternalImportRequest(BaseModel):
     provider: str = Field(min_length=1, max_length=60)
@@ -83,3 +85,23 @@ class EquipmentImportResultRead(BaseModel):
     provider: str
     external_id: str
     equipment_profile: EquipmentProfileRead
+
+
+class ExternalIngredientCatalogItemRead(BaseModel):
+    provider: str
+    external_id: str
+    name: str
+    ingredient_type: str
+    default_unit: str
+    notes: str
+
+
+class ExternalIngredientCatalogResponse(BaseModel):
+    count: int
+    items: list[ExternalIngredientCatalogItemRead] = Field(default_factory=list)
+
+
+class IngredientImportResultRead(BaseModel):
+    provider: str
+    external_id: str
+    ingredient_profile: IngredientProfileRead

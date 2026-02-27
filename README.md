@@ -60,6 +60,7 @@ Examples:
 - `codex/ba-11`
 - `codex/ba-12`
 - `codex/ba-13`
+- `codex/ba-14`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -87,7 +88,7 @@ API docs:
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
 
-All recipe, batch, analytics, AI, inventory, timeline, notifications, and observability endpoints require `Authorization: Bearer <token>` except `GET /api/v1/health`.
+All recipe, batch, ingredient, imports, analytics, AI, inventory, timeline, notifications, and observability endpoints require `Authorization: Bearer <token>` except `GET /api/v1/health`.
 
 ## AI endpoints
 
@@ -113,6 +114,14 @@ Set in `backend/.env`:
 - `AI_LLM_TIMEOUT_SECONDS`
 
 The adapter uses an OpenAI-compatible `POST /v1/chat/completions` interface.
+
+## Ingredient endpoints
+
+- `POST /api/v1/ingredients`
+- `GET /api/v1/ingredients`
+- `GET /api/v1/ingredients/{ingredient_id}`
+- `PUT /api/v1/ingredients/{ingredient_id}`
+- `DELETE /api/v1/ingredients/{ingredient_id}`
 
 ## Inventory endpoints
 
@@ -154,8 +163,10 @@ The preview endpoint compares snapshot ingredient requirements against current i
 - `POST /api/v1/imports/equipment/import`
 - `GET /api/v1/imports/equipment`
 - `GET /api/v1/imports/equipment/{equipment_id}`
+- `GET /api/v1/imports/ingredients/catalog`
+- `POST /api/v1/imports/ingredients/import`
 
-Current providers in `ba-13` are adapter-backed template sources (`brewbench`, `craftdb`) so we can later switch to live external APIs without changing endpoint contracts.
+Current providers in `ba-14` are adapter-backed template sources (`brewbench`, `craftdb`) so we can later switch to live external APIs without changing endpoint contracts.
 
 ## Timeline endpoints
 
