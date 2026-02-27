@@ -254,6 +254,7 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/ingredients").status_code == 401
     assert client.post("/api/v1/ingredients").status_code == 401
     assert client.post("/api/v1/recipes/1/scale").status_code == 401
+    assert client.post("/api/v1/recipes/1/hop-substitutions").status_code == 401
     assert client.get("/api/v1/equipment").status_code == 401
     assert client.post("/api/v1/equipment").status_code == 401
     assert client.get("/api/v1/batches/1/recipe-snapshot").status_code == 401
@@ -590,6 +591,13 @@ def test_not_found_cases(client: TestClient) -> None:
         headers=headers,
     )
     assert missing_recipe_scale.status_code == 404
+
+    missing_hop_substitutions = client.post(
+        "/api/v1/recipes/9999/hop-substitutions",
+        json={"target_hop_name": "Citra", "available_hop_names": ["Mosaic"]},
+        headers=headers,
+    )
+    assert missing_hop_substitutions.status_code == 404
 
     missing_batch_for_reading = client.post(
         "/api/v1/batches/9999/readings",
@@ -1403,3 +1411,130 @@ def test_recipe_scale_rejects_other_user_equipment(client: TestClient) -> None:
         headers=headers_a,
     )
     assert scale_response.status_code == 404
+
+
+def test_recipe_hop_substitutions_with_provided_candidates(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="hop-sub-user", email="hop-sub-user@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+
+    response = client.post(
+        f"/api/v1/recipes/{recipe_id}/hop-substitutions",
+        json={
+            "target_hop_name": "Citra",
+            "available_hop_names": ["Mosaic", "Amarillo", "Unknown Experimental Hop"],
+            "include_inventory_hops": False,
+            "top_k": 3,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["recipe_id"] == recipe_id
+    assert body["candidate_source"] == "provided"
+    assert body["target_hop_profile"]["name"] == "Citra"
+    assert body["recognized_candidate_count"] == 2
+    assert "Unknown Experimental Hop" in body["unresolved_hop_names"]
+    assert len(body["substitutions"]) == 2
+
+    top = body["substitutions"][0]
+    assert top["name"] == "Mosaic"
+    assert top["similarity_score"] > 0.8
+    assert "citrus" in top["shared_descriptors"]
+
+
+def test_recipe_hop_substitutions_uses_inventory_candidates(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="hop-sub-inv", email="hop-sub-inv@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+
+    _create_inventory_item(
+        client,
+        headers,
+        name="Simcoe",
+        ingredient_type="hop",
+        quantity=120,
+        unit="g",
+        low_stock_threshold=30,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="Magnum",
+        ingredient_type="hop",
+        quantity=80,
+        unit="g",
+        low_stock_threshold=20,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="Pale Malt",
+        ingredient_type="grain",
+        quantity=5,
+        unit="kg",
+        low_stock_threshold=1,
+    )
+
+    response = client.post(
+        f"/api/v1/recipes/{recipe_id}/hop-substitutions",
+        json={
+            "target_hop_name": "Citra",
+            "available_hop_names": [],
+            "include_inventory_hops": True,
+            "top_k": 5,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["candidate_source"] == "inventory"
+    assert body["recognized_candidate_count"] == 2
+    names = [item["name"] for item in body["substitutions"]]
+    assert "Simcoe" in names
+    assert "Magnum" in names
+
+
+def test_recipe_hop_substitutions_requires_hop_from_recipe(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="hop-sub-validate", email="hop-sub-validate@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+
+    response = client.post(
+        f"/api/v1/recipes/{recipe_id}/hop-substitutions",
+        json={
+            "target_hop_name": "Saaz",
+            "available_hop_names": ["Hallertau"],
+            "include_inventory_hops": False,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Target hop is not present in this recipe."
+
+
+def test_recipe_hop_substitutions_does_not_use_other_user_inventory(client: TestClient) -> None:
+    headers_a = _register_and_get_headers(client, username="hop-sub-owner-a", email="hop-sub-owner-a@example.com")
+    headers_b = _register_and_get_headers(client, username="hop-sub-owner-b", email="hop-sub-owner-b@example.com")
+    recipe_id = _create_recipe(client, headers=headers_a)
+
+    _create_inventory_item(
+        client,
+        headers_b,
+        name="Mosaic",
+        ingredient_type="hop",
+        quantity=100,
+        unit="g",
+        low_stock_threshold=25,
+    )
+
+    response = client.post(
+        f"/api/v1/recipes/{recipe_id}/hop-substitutions",
+        json={
+            "target_hop_name": "Citra",
+            "available_hop_names": [],
+            "include_inventory_hops": True,
+        },
+        headers=headers_a,
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "No candidate hops found. Provide available_hop_names or add hop inventory."

@@ -110,6 +110,26 @@ _RECIPE_TEMPLATES: tuple[ExternalRecipeTemplate, ...] = (
             ExternalRecipeIngredientTemplate("US-05", "yeast", 1, "pack", "fermentation", 0),
         ),
     ),
+    ExternalRecipeTemplate(
+        provider="brewbench",
+        external_id="torpedo-extra-ipa-clone-v1",
+        name="Sierra Nevada Torpedo Extra IPA Clone",
+        style="21A",
+        target_og=1.065,
+        target_fg=1.013,
+        target_ibu=64,
+        target_srm=8,
+        efficiency_pct=74,
+        notes="Clone-style template inspired by Torpedo Extra IPA with Magnum, Crystal, and Citra hops.",
+        ingredients=(
+            ExternalRecipeIngredientTemplate("Pale Malt", "grain", 5.3, "kg", "mash", 0),
+            ExternalRecipeIngredientTemplate("Crystal 40", "grain", 0.45, "kg", "mash", 0),
+            ExternalRecipeIngredientTemplate("Magnum", "hop", 18, "g", "boil", 60),
+            ExternalRecipeIngredientTemplate("Crystal", "hop", 28, "g", "boil", 15),
+            ExternalRecipeIngredientTemplate("Citra", "hop", 45, "g", "boil", 5),
+            ExternalRecipeIngredientTemplate("US-05", "yeast", 1, "pack", "fermentation", 0),
+        ),
+    ),
 )
 
 
@@ -181,6 +201,30 @@ _INGREDIENT_TEMPLATES: tuple[ExternalIngredientTemplate, ...] = (
         ingredient_type="hop",
         default_unit="g",
         notes="Traditional English aroma hop with earthy/floral character.",
+    ),
+    ExternalIngredientTemplate(
+        provider="brewbench",
+        external_id="ing-citra",
+        name="Citra",
+        ingredient_type="hop",
+        default_unit="g",
+        notes="High-impact US hop with citrus and tropical fruit aroma.",
+    ),
+    ExternalIngredientTemplate(
+        provider="brewbench",
+        external_id="ing-magnum",
+        name="Magnum",
+        ingredient_type="hop",
+        default_unit="g",
+        notes="Clean high-alpha bittering hop used across many IPA recipes.",
+    ),
+    ExternalIngredientTemplate(
+        provider="brewbench",
+        external_id="ing-crystal-hop",
+        name="Crystal",
+        ingredient_type="hop",
+        default_unit="g",
+        notes="Aroma-forward hop with floral and mild spicy notes.",
     ),
 )
 

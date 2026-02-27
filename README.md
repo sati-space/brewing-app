@@ -63,6 +63,7 @@ Examples:
 - `codex/ba-14`
 - `codex/ba-15`
 - `codex/ba-16`
+- `codex/ba-17`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -98,8 +99,11 @@ All recipe, batch, ingredient, imports, analytics, AI, inventory, timeline, noti
 - `GET /api/v1/recipes`
 - `GET /api/v1/recipes/{recipe_id}`
 - `POST /api/v1/recipes/{recipe_id}/scale`
+- `POST /api/v1/recipes/{recipe_id}/hop-substitutions`
 
 `POST /api/v1/recipes/{recipe_id}/scale` returns scaled ingredient amounts and updated OG/FG estimates for target volume and efficiency.
+
+`POST /api/v1/recipes/{recipe_id}/hop-substitutions` ranks substitute hops by flavor profile similarity and alpha-acid compatibility, using provided hop names and/or user inventory.
 
 ## AI endpoints
 
@@ -185,7 +189,7 @@ The preview endpoint compares snapshot ingredient requirements against current i
 - `GET /api/v1/imports/ingredients/catalog`
 - `POST /api/v1/imports/ingredients/import`
 
-Current providers in `ba-14` are adapter-backed template sources (`brewbench`, `craftdb`) so we can later switch to live external APIs without changing endpoint contracts.
+Current providers are adapter-backed template sources (`brewbench`, `craftdb`) so we can later switch to live external APIs without changing endpoint contracts. Recipe templates now include a Torpedo-style IPA clone example for substitution workflows.
 
 ## Timeline endpoints
 
