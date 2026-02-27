@@ -66,3 +66,27 @@ class FermentationTrendRead(BaseModel):
     temperature_warning: bool
     alerts: list[str] = Field(default_factory=list)
     readings: list[FermentationTrendPointRead] = Field(default_factory=list)
+
+
+class RecipeIngredientSnapshotRead(BaseModel):
+    name: str
+    ingredient_type: str
+    amount: float
+    unit: str
+    stage: str
+    minute_added: int
+
+
+class BatchRecipeSnapshotRead(BaseModel):
+    batch_id: int
+    recipe_id: int
+    captured_at: datetime | None
+    name: str | None
+    style: str | None
+    target_og: float | None
+    target_fg: float | None
+    target_ibu: float | None
+    target_srm: float | None
+    efficiency_pct: float | None
+    notes: str | None
+    ingredients: list[RecipeIngredientSnapshotRead] = Field(default_factory=list)

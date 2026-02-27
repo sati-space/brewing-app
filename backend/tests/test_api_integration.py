@@ -241,6 +241,7 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/notifications/upcoming-steps").status_code == 401
     assert client.get("/api/v1/observability/metrics").status_code == 401
     assert client.get("/api/v1/analytics/overview").status_code == 401
+    assert client.get("/api/v1/batches/1/recipe-snapshot").status_code == 401
     assert client.get("/api/v1/batches/1/fermentation/trend").status_code == 401
 
     create_response = client.post(
@@ -544,6 +545,7 @@ def test_user_scope_isolation(client: TestClient) -> None:
     )
     assert same_name_for_b.status_code == 201
 
+    assert client.get(f"/api/v1/batches/{batch_id}/recipe-snapshot", headers=headers_b).status_code == 404
     assert client.get(f"/api/v1/batches/{batch_id}/readings", headers=headers_b).status_code == 404
     assert client.get(f"/api/v1/batches/{batch_id}/fermentation/trend", headers=headers_b).status_code == 404
     assert client.get(f"/api/v1/batches/{batch_id}/timeline/steps", headers=headers_b).status_code == 404
@@ -585,6 +587,7 @@ def test_not_found_cases(client: TestClient) -> None:
     assert missing_batch_diagnose.status_code == 404
 
     assert client.get("/api/v1/inventory/9999", headers=headers).status_code == 404
+    assert client.get("/api/v1/batches/9999/recipe-snapshot", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/readings", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/fermentation/trend", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/timeline/steps", headers=headers).status_code == 404
@@ -791,3 +794,27 @@ def test_fermentation_trend_alerts_and_readings_order(client: TestClient) -> Non
     trend_points = body["readings"]
     assert len(trend_points) == 4
     assert trend_points[-1]["gravity"] == 1.0308
+
+
+def test_batch_recipe_snapshot_returns_frozen_recipe_data(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="snapshot-user", email="snapshot-user@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+    batch_id = _create_batch(client, headers, recipe_id, "Snapshot Batch", status="brewing")
+
+    response = client.get(f"/api/v1/batches/{batch_id}/recipe-snapshot", headers=headers)
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["batch_id"] == batch_id
+    assert body["recipe_id"] == recipe_id
+    assert body["captured_at"] is not None
+    assert body["name"] == "Session IPA"
+    assert body["style"] == "21B"
+    assert body["target_og"] == 1.045
+    assert body["target_fg"] == 1.01
+    assert body["target_ibu"] == 40.0
+    assert body["target_srm"] == 5.0
+    assert body["efficiency_pct"] == 72.0
+
+    ingredient_names = [ingredient["name"] for ingredient in body["ingredients"]]
+    assert ingredient_names == ["Pale Malt", "Citra", "US-05"]

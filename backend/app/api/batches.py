@@ -11,10 +11,13 @@ from app.models.user import User
 from app.schemas.batch import (
     BatchCreate,
     BatchRead,
+    BatchRecipeSnapshotRead,
     FermentationReadingCreate,
     FermentationReadingRead,
     FermentationTrendRead,
+    RecipeIngredientSnapshotRead,
 )
+from app.services.batch_snapshot import apply_recipe_snapshot, parse_snapshot_ingredients
 from app.services.fermentation import build_fermentation_trend
 
 router = APIRouter(prefix="/batches", tags=["batches"])
@@ -40,15 +43,15 @@ def create_batch(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Batch:
-    recipe_exists = (
-        db.query(Recipe.id)
+    recipe = (
+        db.query(Recipe)
         .filter(
             Recipe.id == payload.recipe_id,
             Recipe.owner_user_id == current_user.id,
         )
         .first()
     )
-    if not recipe_exists:
+    if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
     batch = Batch(
@@ -62,6 +65,8 @@ def create_batch(
         measured_fg=payload.measured_fg,
         notes=payload.notes,
     )
+    apply_recipe_snapshot(batch, recipe)
+
     db.add(batch)
     db.commit()
     db.refresh(batch)
@@ -78,6 +83,36 @@ def list_batches(
         .filter(Batch.owner_user_id == current_user.id)
         .order_by(Batch.created_at.desc())
         .all()
+    )
+
+
+@router.get("/{batch_id}/recipe-snapshot", response_model=BatchRecipeSnapshotRead)
+def get_batch_recipe_snapshot(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BatchRecipeSnapshotRead:
+    batch = _get_user_batch_or_404(db, batch_id=batch_id, user_id=current_user.id)
+
+    ingredient_payload = parse_snapshot_ingredients(batch)
+    ingredients = [
+        RecipeIngredientSnapshotRead(**item)
+        for item in ingredient_payload
+    ]
+
+    return BatchRecipeSnapshotRead(
+        batch_id=batch.id,
+        recipe_id=batch.recipe_id,
+        captured_at=batch.recipe_snapshot_captured_at or batch.created_at,
+        name=batch.recipe_name_snapshot,
+        style=batch.recipe_style_snapshot,
+        target_og=batch.recipe_target_og_snapshot,
+        target_fg=batch.recipe_target_fg_snapshot,
+        target_ibu=batch.recipe_target_ibu_snapshot,
+        target_srm=batch.recipe_target_srm_snapshot,
+        efficiency_pct=batch.recipe_efficiency_pct_snapshot,
+        notes=batch.recipe_notes_snapshot,
+        ingredients=ingredients,
     )
 
 
