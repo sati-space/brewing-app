@@ -227,6 +227,7 @@ def test_auth_register_login_and_me(client: TestClient) -> None:
     assert register_body["token_type"] == "bearer"
     assert register_body["user"]["username"] == "alice"
     assert register_body["user"]["preferred_unit_system"] == "metric"
+    assert register_body["user"]["preferred_temperature_unit"] == "C"
     assert register_body["user"]["preferred_language"] == "en"
 
     login_response = client.post(
@@ -248,11 +249,12 @@ def test_auth_register_login_and_me(client: TestClient) -> None:
 
     update_preferences = client.patch(
         "/api/v1/auth/me/preferences",
-        json={"preferred_unit_system": "imperial", "preferred_language": "es"},
+        json={"preferred_unit_system": "imperial", "preferred_temperature_unit": "F", "preferred_language": "es"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert update_preferences.status_code == 200
     assert update_preferences.json()["preferred_unit_system"] == "imperial"
+    assert update_preferences.json()["preferred_temperature_unit"] == "F"
     assert update_preferences.json()["preferred_language"] == "es"
 
 
@@ -2056,7 +2058,7 @@ def test_brew_plan_respects_user_language_and_unit_preferences(client: TestClien
     token = headers["Authorization"].replace("Bearer ", "")
     update_preferences = client.patch(
         "/api/v1/auth/me/preferences",
-        json={"preferred_unit_system": "imperial", "preferred_language": "es"},
+        json={"preferred_unit_system": "imperial", "preferred_temperature_unit": "C", "preferred_language": "es"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert update_preferences.status_code == 200
@@ -2070,10 +2072,21 @@ def test_brew_plan_respects_user_language_and_unit_preferences(client: TestClien
     body = brew_plan_response.json()
 
     assert body["unit_system"] == "imperial"
+    assert body["temperature_unit"] == "C"
     assert body["language"] == "es"
     assert body["display_units"]["volume_unit"] == "gal"
-    assert body["display_units"]["temperature_unit"] == "F"
+    assert body["display_units"]["temperature_unit"] == "C"
     assert any("No se selecciono perfil de agua" in note for note in body["notes"])
+
+    override_temp_response = client.post(
+        f"/api/v1/batches/{batch_id}/brew-plan",
+        json={"temperature_unit": "F"},
+        headers=headers,
+    )
+    assert override_temp_response.status_code == 200
+    override_body = override_temp_response.json()
+    assert override_body["temperature_unit"] == "F"
+    assert override_body["display_units"]["temperature_unit"] == "F"
 
 
 def test_brew_plan_apply_timeline_creates_and_replaces_pending_steps(client: TestClient) -> None:

@@ -138,6 +138,7 @@ class BrewPlanRequest(BaseModel):
     available_hop_names: list[str] = Field(default_factory=list, max_length=50)
     brew_start_at: datetime | None = None
     unit_system: Literal["metric", "imperial"] | None = None
+    temperature_unit: Literal["C", "F"] | None = None
     language: Literal["en", "es"] | None = None
 
 
@@ -246,6 +247,7 @@ class BrewPlanRead(BaseModel):
     style: str
     generated_at: datetime
     unit_system: Literal["metric", "imperial"]
+    temperature_unit: Literal["C", "F"]
     language: Literal["en", "es"]
     volumes: BrewPlanVolumeRead
     gravity: BrewPlanGravityRead
@@ -263,7 +265,7 @@ class BrewPlanDisplayUnitsRead(BaseModel):
     language: Literal["en", "es"]
     grain_unit: str
     volume_unit: str
-    temperature_unit: str
+    temperature_unit: Literal["C", "F"]
 
 
 class BrewPlanDisplayRead(BaseModel):

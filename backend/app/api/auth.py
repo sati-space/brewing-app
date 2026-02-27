@@ -52,6 +52,8 @@ def update_preferences(
 ) -> User:
     if payload.preferred_unit_system is not None:
         current_user.preferred_unit_system = payload.preferred_unit_system
+    if payload.preferred_temperature_unit is not None:
+        current_user.preferred_temperature_unit = payload.preferred_temperature_unit
     if payload.preferred_language is not None:
         current_user.preferred_language = payload.preferred_language
 

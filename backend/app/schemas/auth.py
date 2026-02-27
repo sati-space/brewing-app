@@ -20,6 +20,7 @@ class UserRead(BaseModel):
     username: str
     email: str
     preferred_unit_system: Literal["metric", "imperial"]
+    preferred_temperature_unit: Literal["C", "F"]
     preferred_language: Literal["en", "es"]
     created_at: datetime
 
@@ -28,6 +29,7 @@ class UserRead(BaseModel):
 
 class UserPreferencesUpdate(BaseModel):
     preferred_unit_system: Literal["metric", "imperial"] | None = None
+    preferred_temperature_unit: Literal["C", "F"] | None = None
     preferred_language: Literal["en", "es"] | None = None
 
 
