@@ -62,6 +62,7 @@ Examples:
 - `codex/ba-13`
 - `codex/ba-14`
 - `codex/ba-15`
+- `codex/ba-16`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -90,6 +91,15 @@ API docs:
 - `GET /api/v1/auth/me`
 
 All recipe, batch, ingredient, imports, analytics, AI, inventory, timeline, notifications, and observability endpoints require `Authorization: Bearer <token>` except `GET /api/v1/health`.
+
+## Recipe endpoints
+
+- `POST /api/v1/recipes`
+- `GET /api/v1/recipes`
+- `GET /api/v1/recipes/{recipe_id}`
+- `POST /api/v1/recipes/{recipe_id}/scale`
+
+`POST /api/v1/recipes/{recipe_id}/scale` returns scaled ingredient amounts and updated OG/FG estimates for target volume and efficiency.
 
 ## AI endpoints
 

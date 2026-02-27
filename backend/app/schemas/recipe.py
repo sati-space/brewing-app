@@ -43,3 +43,37 @@ class RecipeRead(RecipeBase):
     ingredients: list[RecipeIngredientRead] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RecipeScaleRequest(BaseModel):
+    source_batch_volume_liters: float = Field(default=20.0, gt=0)
+    target_batch_volume_liters: float = Field(gt=0)
+    equipment_profile_id: int | None = Field(default=None, gt=0)
+    target_efficiency_pct: float | None = Field(default=None, gt=0, le=100)
+
+
+class ScaledRecipeIngredientRead(BaseModel):
+    name: str
+    ingredient_type: str
+    original_amount: float
+    scaled_amount: float
+    unit: str
+    stage: str
+    minute_added: int
+
+
+class RecipeScaleRead(BaseModel):
+    recipe_id: int
+    recipe_name: str
+    style: str
+    source_batch_volume_liters: float
+    target_batch_volume_liters: float
+    scale_factor: float
+    source_efficiency_pct: float
+    target_efficiency_pct: float
+    estimated_target_og: float
+    estimated_target_fg: float
+    estimated_abv: float
+    target_ibu: float
+    target_srm: float
+    ingredients: list[ScaledRecipeIngredientRead] = Field(default_factory=list)
