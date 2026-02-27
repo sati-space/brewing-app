@@ -65,6 +65,7 @@ Examples:
 - `codex/ba-16`
 - `codex/ba-17`
 - `codex/ba-18`
+- `codex/ba-19`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -194,8 +195,17 @@ Recommendation requests accept either `style_code` (BJCP) or `recipe_id` and ret
 
 - `GET /api/v1/batches/{batch_id}/inventory/preview`
 - `POST /api/v1/batches/{batch_id}/inventory/consume`
+- `POST /api/v1/batches/{batch_id}/brew-plan`
 
 The preview endpoint compares snapshot ingredient requirements against current inventory with unit conversion support (for example `g` <-> `kg`).
+
+The brew-plan endpoint returns brew-day calculations and planner output:
+- mash/sparge/boil volume and timing estimates
+- OG/FG/ABV estimates adjusted by inventory coverage and equipment efficiency
+- shopping list gaps
+- hop substitution candidates from available inventory/provider inputs
+- optional water chemistry recommendations (when `water_profile_id` is provided)
+- timer-ready step schedule (`timer_key`, durations, offsets, optional planned timestamps)
 
 ## External Import Endpoints
 
