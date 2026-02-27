@@ -58,6 +58,7 @@ Examples:
 - `codex/ba-9`
 - `codex/ba-10`
 - `codex/ba-11`
+- `codex/ba-12`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -136,6 +137,13 @@ The adapter uses an OpenAI-compatible `POST /v1/chat/completions` interface.
 `POST /api/v1/batches/{batch_id}/readings` accepts an optional `recorded_at` timestamp for backfilled readings.
 
 `GET /api/v1/batches/{batch_id}/recipe-snapshot` returns the frozen recipe profile and ingredients captured when the batch was created.
+
+## Batch Inventory Endpoints
+
+- `GET /api/v1/batches/{batch_id}/inventory/preview`
+- `POST /api/v1/batches/{batch_id}/inventory/consume`
+
+The preview endpoint compares snapshot ingredient requirements against current inventory with unit conversion support (for example `g` <-> `kg`).
 
 ## Timeline endpoints
 

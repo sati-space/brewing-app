@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -10,6 +10,8 @@ from app.models.recipe import Recipe
 from app.models.user import User
 from app.schemas.batch import (
     BatchCreate,
+    BatchInventoryConsumeRead,
+    BatchInventoryPreviewRead,
     BatchRead,
     BatchRecipeSnapshotRead,
     FermentationReadingCreate,
@@ -19,6 +21,7 @@ from app.schemas.batch import (
 )
 from app.services.batch_snapshot import apply_recipe_snapshot, parse_snapshot_ingredients
 from app.services.fermentation import build_fermentation_trend
+from app.services.inventory_consumption import build_inventory_preview, consume_inventory_for_batch
 
 router = APIRouter(prefix="/batches", tags=["batches"])
 
@@ -114,6 +117,31 @@ def get_batch_recipe_snapshot(
         notes=batch.recipe_notes_snapshot,
         ingredients=ingredients,
     )
+
+
+@router.get("/{batch_id}/inventory/preview", response_model=BatchInventoryPreviewRead)
+def get_batch_inventory_preview(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BatchInventoryPreviewRead:
+    batch = _get_user_batch_or_404(db, batch_id=batch_id, user_id=current_user.id)
+    return build_inventory_preview(db, batch=batch, user_id=current_user.id)
+
+
+@router.post("/{batch_id}/inventory/consume", response_model=BatchInventoryConsumeRead)
+def consume_batch_inventory(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BatchInventoryConsumeRead:
+    batch = _get_user_batch_or_404(db, batch_id=batch_id, user_id=current_user.id)
+    result = consume_inventory_for_batch(db, batch=batch, user_id=current_user.id)
+
+    if not result.consumed:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result.model_dump(mode="json"))
+
+    return result
 
 
 @router.post("/{batch_id}/readings", response_model=FermentationReadingRead, status_code=201)
