@@ -77,3 +77,40 @@ class RecipeScaleRead(BaseModel):
     target_ibu: float
     target_srm: float
     ingredients: list[ScaledRecipeIngredientRead] = Field(default_factory=list)
+
+
+class RecipeHopSubstitutionRequest(BaseModel):
+    target_hop_name: str = Field(min_length=1, max_length=120)
+    available_hop_names: list[str] = Field(default_factory=list, max_length=50)
+    include_inventory_hops: bool = True
+    top_k: int = Field(default=5, ge=1, le=10)
+
+
+class HopProfileRead(BaseModel):
+    name: str
+    alpha_acid_min_pct: float
+    alpha_acid_max_pct: float
+    flavor_descriptors: list[str] = Field(default_factory=list)
+
+
+class HopSubstitutionCandidateRead(BaseModel):
+    name: str
+    alpha_acid_min_pct: float
+    alpha_acid_max_pct: float
+    flavor_similarity_score: float
+    descriptor_overlap_score: float
+    similarity_score: float
+    recommended_bittering_ratio: float
+    shared_descriptors: list[str] = Field(default_factory=list)
+
+
+class RecipeHopSubstitutionRead(BaseModel):
+    recipe_id: int
+    recipe_name: str
+    target_hop_name: str
+    target_hop_profile: HopProfileRead
+    candidate_source: str
+    candidate_input_count: int
+    recognized_candidate_count: int
+    unresolved_hop_names: list[str] = Field(default_factory=list)
+    substitutions: list[HopSubstitutionCandidateRead] = Field(default_factory=list)
