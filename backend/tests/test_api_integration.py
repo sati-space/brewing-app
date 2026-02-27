@@ -241,6 +241,7 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/notifications/upcoming-steps").status_code == 401
     assert client.get("/api/v1/observability/metrics").status_code == 401
     assert client.get("/api/v1/analytics/overview").status_code == 401
+    assert client.get("/api/v1/batches/1/fermentation/trend").status_code == 401
 
     create_response = client.post(
         "/api/v1/recipes",
@@ -543,6 +544,8 @@ def test_user_scope_isolation(client: TestClient) -> None:
     )
     assert same_name_for_b.status_code == 201
 
+    assert client.get(f"/api/v1/batches/{batch_id}/readings", headers=headers_b).status_code == 404
+    assert client.get(f"/api/v1/batches/{batch_id}/fermentation/trend", headers=headers_b).status_code == 404
     assert client.get(f"/api/v1/batches/{batch_id}/timeline/steps", headers=headers_b).status_code == 404
     assert (
         client.patch(
@@ -582,6 +585,8 @@ def test_not_found_cases(client: TestClient) -> None:
     assert missing_batch_diagnose.status_code == 404
 
     assert client.get("/api/v1/inventory/9999", headers=headers).status_code == 404
+    assert client.get("/api/v1/batches/9999/readings", headers=headers).status_code == 404
+    assert client.get("/api/v1/batches/9999/fermentation/trend", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/timeline/steps", headers=headers).status_code == 404
 
 
@@ -737,3 +742,52 @@ def test_analytics_overview_user_scoped_metrics(client: TestClient) -> None:
 
     recent_names = [item["name"] for item in body["recent_batches"]]
     assert recent_names == ["A Batch IPA 2", "A Batch Stout", "A Batch IPA 1"]
+
+
+def test_fermentation_trend_alerts_and_readings_order(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="trend-user", email="trend-user@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+    batch_id = _create_batch(client, headers, recipe_id, "Trend Batch", status="fermenting")
+
+    reading_payloads = [
+        {"recorded_at": "2026-02-20T08:00:00", "gravity": 1.0500, "temp_c": 20.0, "ph": 5.2, "notes": "Day 0"},
+        {"recorded_at": "2026-02-22T08:00:00", "gravity": 1.0320, "temp_c": 21.0, "ph": 5.0, "notes": "Day 2"},
+        {"recorded_at": "2026-02-23T08:00:00", "gravity": 1.0310, "temp_c": 24.8, "ph": 4.9, "notes": "Day 3"},
+        {"recorded_at": "2026-02-23T20:00:00", "gravity": 1.0308, "temp_c": 25.2, "ph": 4.8, "notes": "Day 3 PM"},
+    ]
+
+    for payload in reading_payloads:
+        response = client.post(
+            f"/api/v1/batches/{batch_id}/readings",
+            json=payload,
+            headers=headers,
+        )
+        assert response.status_code == 201
+
+    list_response = client.get(f"/api/v1/batches/{batch_id}/readings", headers=headers)
+    assert list_response.status_code == 200
+    listed = list_response.json()
+    assert [item["gravity"] for item in listed] == [1.05, 1.032, 1.031, 1.0308]
+
+    trend_response = client.get(f"/api/v1/batches/{batch_id}/fermentation/trend", headers=headers)
+    assert trend_response.status_code == 200
+    body = trend_response.json()
+
+    assert body["batch_id"] == batch_id
+    assert body["reading_count"] == 4
+    assert body["first_recorded_at"].startswith("2026-02-20T08:00:00")
+    assert body["latest_recorded_at"].startswith("2026-02-23T20:00:00")
+    assert body["latest_gravity"] == 1.0308
+    assert body["latest_temp_c"] == 25.2
+    assert body["latest_ph"] == 4.8
+    assert body["gravity_drop"] == 0.0192
+    assert body["average_hourly_gravity_drop"] == 0.00023
+    assert body["plateau_risk"] is True
+    assert body["temperature_warning"] is True
+
+    assert any("flattened" in alert for alert in body["alerts"])
+    assert any("temperature is high" in alert for alert in body["alerts"])
+
+    trend_points = body["readings"]
+    assert len(trend_points) == 4
+    assert trend_points[-1]["gravity"] == 1.0308

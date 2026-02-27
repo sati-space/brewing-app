@@ -33,7 +33,7 @@ class FermentationReadingBase(BaseModel):
 
 
 class FermentationReadingCreate(FermentationReadingBase):
-    pass
+    recorded_at: datetime | None = None
 
 
 class FermentationReadingRead(FermentationReadingBase):
@@ -42,3 +42,27 @@ class FermentationReadingRead(FermentationReadingBase):
     recorded_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class FermentationTrendPointRead(BaseModel):
+    id: int
+    recorded_at: datetime
+    gravity: float | None
+    temp_c: float | None
+    ph: float | None
+
+
+class FermentationTrendRead(BaseModel):
+    batch_id: int
+    reading_count: int
+    first_recorded_at: datetime | None
+    latest_recorded_at: datetime | None
+    latest_gravity: float | None
+    latest_temp_c: float | None
+    latest_ph: float | None
+    gravity_drop: float | None
+    average_hourly_gravity_drop: float | None
+    plateau_risk: bool
+    temperature_warning: bool
+    alerts: list[str] = Field(default_factory=list)
+    readings: list[FermentationTrendPointRead] = Field(default_factory=list)

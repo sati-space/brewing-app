@@ -56,6 +56,7 @@ Examples:
 - `codex/ba-7`
 - `codex/ba-8`
 - `codex/ba-9`
+- `codex/ba-10`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -123,6 +124,14 @@ The adapter uses an OpenAI-compatible `POST /v1/chat/completions` interface.
 ## Analytics endpoint
 
 - `GET /api/v1/analytics/overview`
+
+## Fermentation endpoints
+
+- `POST /api/v1/batches/{batch_id}/readings`
+- `GET /api/v1/batches/{batch_id}/readings`
+- `GET /api/v1/batches/{batch_id}/fermentation/trend`
+
+`POST /api/v1/batches/{batch_id}/readings` accepts an optional `recorded_at` timestamp for backfilled readings.
 
 ## Timeline endpoints
 
