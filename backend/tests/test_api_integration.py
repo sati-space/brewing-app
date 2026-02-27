@@ -269,6 +269,7 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/batches/1/recipe-snapshot").status_code == 401
     assert client.get("/api/v1/batches/1/inventory/preview").status_code == 401
     assert client.post("/api/v1/batches/1/inventory/consume").status_code == 401
+    assert client.post("/api/v1/batches/1/brew-plan").status_code == 401
     assert client.get("/api/v1/batches/1/fermentation/trend").status_code == 401
 
     create_response = client.post(
@@ -648,6 +649,7 @@ def test_not_found_cases(client: TestClient) -> None:
     assert client.get("/api/v1/batches/9999/recipe-snapshot", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/inventory/preview", headers=headers).status_code == 404
     assert client.post("/api/v1/batches/9999/inventory/consume", headers=headers).status_code == 404
+    assert client.post("/api/v1/batches/9999/brew-plan", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/readings", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/fermentation/trend", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/timeline/steps", headers=headers).status_code == 404
@@ -1777,3 +1779,205 @@ def test_water_profiles_user_scope_and_unknown_style(client: TestClient) -> None
     )
     assert missing_input_response.status_code == 422
     assert missing_input_response.json()["detail"] == "Provide style_code or recipe_id for recommendation."
+
+
+def test_brew_plan_combines_inventory_water_and_substitutions(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="brew-plan-user", email="brew-plan-user@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+    batch_id = _create_batch(client, headers, recipe_id, "Brew Plan Batch", status="planned")
+
+    equipment_response = client.post(
+        "/api/v1/equipment",
+        json={
+            "name": "Plan Rig",
+            "batch_volume_liters": 20,
+            "mash_tun_volume_liters": 25,
+            "boil_kettle_volume_liters": 30,
+            "brewhouse_efficiency_pct": 70,
+            "boil_off_rate_l_per_hour": 3.2,
+            "trub_loss_liters": 1.1,
+            "notes": "",
+        },
+        headers=headers,
+    )
+    assert equipment_response.status_code == 201
+    equipment_id = equipment_response.json()["id"]
+
+    water_response = client.post(
+        "/api/v1/water-profiles",
+        json={
+            "name": "Tap Plan Water",
+            "calcium_ppm": 35,
+            "magnesium_ppm": 6,
+            "sodium_ppm": 12,
+            "chloride_ppm": 30,
+            "sulfate_ppm": 40,
+            "bicarbonate_ppm": 55,
+            "notes": "",
+        },
+        headers=headers,
+    )
+    assert water_response.status_code == 201
+    water_profile_id = water_response.json()["id"]
+
+    _create_inventory_item(
+        client,
+        headers,
+        name="Pale Malt",
+        ingredient_type="grain",
+        quantity=2.0,
+        unit="kg",
+        low_stock_threshold=0.5,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="US-05",
+        ingredient_type="yeast",
+        quantity=1.0,
+        unit="pack",
+        low_stock_threshold=0.2,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="Mosaic",
+        ingredient_type="hop",
+        quantity=80.0,
+        unit="g",
+        low_stock_threshold=20.0,
+    )
+
+    brew_plan_response = client.post(
+        f"/api/v1/batches/{batch_id}/brew-plan",
+        json={
+            "equipment_profile_id": equipment_id,
+            "water_profile_id": water_profile_id,
+            "available_hop_names": ["Simcoe"],
+            "brew_start_at": "2026-03-01T08:00:00",
+        },
+        headers=headers,
+    )
+    assert brew_plan_response.status_code == 200
+    body = brew_plan_response.json()
+
+    assert body["batch_id"] == batch_id
+    assert body["equipment"]["equipment_profile_id"] == equipment_id
+    assert body["water_recommendation"] is not None
+    assert body["water_recommendation"]["style_code"] == "21B"
+    assert body["volumes"]["mash_target_temp_c"] > 60
+    assert body["volumes"]["mash_rest_minutes"] >= 60
+    assert body["gravity"]["estimated_og"] < body["gravity"]["source_target_og"]
+    assert body["inventory_shortage_count"] >= 1
+
+    shopping_names = {item["name"] for item in body["shopping_list"]}
+    assert "Citra" in shopping_names
+
+    hop_targets = {item["target_hop_name"] for item in body["hop_substitutions"]}
+    assert "Citra" in hop_targets
+
+    first_step = body["timer_plan"][0]
+    assert first_step["start_offset_minutes"] == 0
+    assert first_step["planned_start_at"].startswith("2026-03-01T08:00:00")
+
+
+def test_brew_plan_scopes_profiles_to_owner(client: TestClient) -> None:
+    headers_a = _register_and_get_headers(client, username="brew-plan-owner-a", email="brew-plan-owner-a@example.com")
+    headers_b = _register_and_get_headers(client, username="brew-plan-owner-b", email="brew-plan-owner-b@example.com")
+
+    recipe_id = _create_recipe(client, headers=headers_a)
+    batch_id = _create_batch(client, headers_a, recipe_id, "Owner A Batch", status="planned")
+
+    equipment_b = client.post(
+        "/api/v1/equipment",
+        json={
+            "name": "Owner B Rig",
+            "batch_volume_liters": 20,
+            "mash_tun_volume_liters": 26,
+            "boil_kettle_volume_liters": 31,
+            "brewhouse_efficiency_pct": 69,
+            "boil_off_rate_l_per_hour": 3.1,
+            "trub_loss_liters": 1.0,
+            "notes": "",
+        },
+        headers=headers_b,
+    )
+    assert equipment_b.status_code == 201
+    equipment_id_b = equipment_b.json()["id"]
+
+    water_b = client.post(
+        "/api/v1/water-profiles",
+        json={
+            "name": "Owner B Water",
+            "calcium_ppm": 30,
+            "magnesium_ppm": 5,
+            "sodium_ppm": 8,
+            "chloride_ppm": 25,
+            "sulfate_ppm": 35,
+            "bicarbonate_ppm": 40,
+            "notes": "",
+        },
+        headers=headers_b,
+    )
+    assert water_b.status_code == 201
+    water_profile_id_b = water_b.json()["id"]
+
+    invalid_equipment = client.post(
+        f"/api/v1/batches/{batch_id}/brew-plan",
+        json={"equipment_profile_id": equipment_id_b},
+        headers=headers_a,
+    )
+    assert invalid_equipment.status_code == 404
+
+    invalid_water = client.post(
+        f"/api/v1/batches/{batch_id}/brew-plan",
+        json={"water_profile_id": water_profile_id_b},
+        headers=headers_a,
+    )
+    assert invalid_water.status_code == 404
+
+
+def test_brew_plan_without_water_profile(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="brew-plan-nowater", email="brew-plan-nowater@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+    batch_id = _create_batch(client, headers, recipe_id, "No Water Batch", status="planned")
+
+    _create_inventory_item(
+        client,
+        headers,
+        name="Pale Malt",
+        ingredient_type="grain",
+        quantity=5.0,
+        unit="kg",
+        low_stock_threshold=1.0,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="Citra",
+        ingredient_type="hop",
+        quantity=60.0,
+        unit="g",
+        low_stock_threshold=15.0,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="US-05",
+        ingredient_type="yeast",
+        quantity=2.0,
+        unit="pack",
+        low_stock_threshold=1.0,
+    )
+
+    brew_plan_response = client.post(
+        f"/api/v1/batches/{batch_id}/brew-plan",
+        json={},
+        headers=headers,
+    )
+    assert brew_plan_response.status_code == 200
+    body = brew_plan_response.json()
+
+    assert body["water_recommendation"] is None
+    assert any("No water profile selected" in note for note in body["notes"])
+    assert body["inventory_shortage_count"] == 0

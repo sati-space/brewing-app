@@ -1,17 +1,26 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.batch import Batch, FermentationReading
+from app.models.equipment_profile import EquipmentProfile
+from app.models.inventory import InventoryItem
 from app.models.recipe import Recipe
 from app.models.user import User
+from app.models.water_profile import WaterProfile
 from app.schemas.batch import (
     BatchCreate,
     BatchInventoryConsumeRead,
     BatchInventoryPreviewRead,
+    BrewPlanMineralAdditionRead,
+    BrewPlanRead,
+    BrewPlanRequest,
+    BrewPlanWaterIonRead,
+    BrewPlanWaterRead,
     BatchRead,
     BatchRecipeSnapshotRead,
     FermentationReadingCreate,
@@ -20,8 +29,11 @@ from app.schemas.batch import (
     RecipeIngredientSnapshotRead,
 )
 from app.services.batch_snapshot import apply_recipe_snapshot, parse_snapshot_ingredients
+from app.services.bjcp_styles import resolve_bjcp_style
+from app.services.brew_plan import build_brew_day_plan
 from app.services.fermentation import build_fermentation_trend
 from app.services.inventory_consumption import build_inventory_preview, consume_inventory_for_batch
+from app.services.water_recommendation import build_water_recommendation
 
 router = APIRouter(prefix="/batches", tags=["batches"])
 
@@ -40,22 +52,27 @@ def _get_user_batch_or_404(db: Session, batch_id: int, user_id: int) -> Batch:
     return batch
 
 
+def _get_user_recipe_or_404(db: Session, recipe_id: int, user_id: int) -> Recipe:
+    recipe = (
+        db.query(Recipe)
+        .filter(
+            Recipe.id == recipe_id,
+            Recipe.owner_user_id == user_id,
+        )
+        .first()
+    )
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return recipe
+
+
 @router.post("", response_model=BatchRead, status_code=201)
 def create_batch(
     payload: BatchCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Batch:
-    recipe = (
-        db.query(Recipe)
-        .filter(
-            Recipe.id == payload.recipe_id,
-            Recipe.owner_user_id == current_user.id,
-        )
-        .first()
-    )
-    if not recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
+    recipe = _get_user_recipe_or_404(db, recipe_id=payload.recipe_id, user_id=current_user.id)
 
     batch = Batch(
         owner_user_id=current_user.id,
@@ -142,6 +159,108 @@ def consume_batch_inventory(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result.model_dump(mode="json"))
 
     return result
+
+
+@router.post("/{batch_id}/brew-plan", response_model=BrewPlanRead)
+def generate_brew_plan(
+    batch_id: int,
+    payload: BrewPlanRequest = Body(default_factory=BrewPlanRequest),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BrewPlanRead:
+    batch = _get_user_batch_or_404(db, batch_id=batch_id, user_id=current_user.id)
+    recipe = _get_user_recipe_or_404(db, recipe_id=batch.recipe_id, user_id=current_user.id)
+
+    equipment: EquipmentProfile | None = None
+    if payload.equipment_profile_id is not None:
+        equipment = (
+            db.query(EquipmentProfile)
+            .filter(
+                EquipmentProfile.id == payload.equipment_profile_id,
+                EquipmentProfile.owner_user_id == current_user.id,
+            )
+            .first()
+        )
+        if equipment is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipment profile not found")
+
+    inventory_preview = build_inventory_preview(db, batch=batch, user_id=current_user.id)
+    snapshot_ingredients = parse_snapshot_ingredients(batch)
+    inventory_hop_names = [
+        item.name
+        for item in (
+            db.query(InventoryItem)
+            .filter(
+                InventoryItem.owner_user_id == current_user.id,
+                func.lower(InventoryItem.ingredient_type) == "hop",
+            )
+            .all()
+        )
+    ]
+
+    core_plan = build_brew_day_plan(
+        batch=batch,
+        inventory_preview=inventory_preview,
+        equipment=equipment,
+        snapshot_ingredients=snapshot_ingredients,
+        inventory_hop_names=inventory_hop_names,
+        extra_available_hops=payload.available_hop_names,
+        brew_start_at=payload.brew_start_at,
+    )
+
+    style_identifier = payload.style_code or batch.recipe_style_snapshot or recipe.style
+    water_recommendation: BrewPlanWaterRead | None = None
+    notes = list(core_plan.notes)
+    if payload.water_profile_id is not None:
+        water_profile = (
+            db.query(WaterProfile)
+            .filter(
+                WaterProfile.id == payload.water_profile_id,
+                WaterProfile.owner_user_id == current_user.id,
+            )
+            .first()
+        )
+        if water_profile is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Water profile not found")
+
+        style = resolve_bjcp_style(style_identifier)
+        if style is None:
+            notes.append("Water recommendation skipped because the batch style is not mapped to BJCP data.")
+        else:
+            water_plan = build_water_recommendation(
+                water_profile=water_profile,
+                style=style,
+                batch_volume_liters=batch.volume_liters,
+            )
+            water_recommendation = BrewPlanWaterRead(
+                water_profile_id=water_profile.id,
+                water_profile_name=water_profile.name,
+                style_code=style.code,
+                style_name=style.name,
+                source_profile=BrewPlanWaterIonRead(**water_plan.source_profile.__dict__),
+                target_profile=BrewPlanWaterIonRead(**water_plan.target_profile.__dict__),
+                projected_profile=BrewPlanWaterIonRead(**water_plan.projected_profile.__dict__),
+                additions=[BrewPlanMineralAdditionRead(**row.__dict__) for row in water_plan.additions],
+                notes=list(water_plan.notes),
+            )
+    else:
+        notes.append("No water profile selected; water chemistry recommendation not included.")
+
+    return BrewPlanRead(
+        batch_id=batch.id,
+        batch_name=batch.name,
+        style=style_identifier,
+        generated_at=datetime.utcnow(),
+        volumes=core_plan.volumes,
+        gravity=core_plan.gravity,
+        equipment=core_plan.equipment,
+        inventory_shortage_count=inventory_preview.shortage_count,
+        shopping_list=core_plan.shopping_list,
+        hop_substitutions=core_plan.hop_substitutions,
+        water_recommendation=water_recommendation,
+        timer_plan=core_plan.timer_plan,
+        notes=notes,
+    )
 
 
 @router.post("/{batch_id}/readings", response_model=FermentationReadingRead, status_code=201)
