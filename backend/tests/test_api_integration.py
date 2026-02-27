@@ -13,6 +13,7 @@ from app.api.analytics import router as analytics_router
 from app.api.auth import router as auth_router
 from app.api.batches import router as batch_router
 from app.api.health import router as health_router
+from app.api.imports import router as imports_router
 from app.api.inventory import router as inventory_router
 from app.api.notifications import router as notifications_router
 from app.api.observability import router as observability_router
@@ -46,6 +47,7 @@ def client() -> Generator[TestClient, None, None]:
     app.include_router(batch_router, prefix=settings.api_prefix)
     app.include_router(analytics_router, prefix=settings.api_prefix)
     app.include_router(ai_router, prefix=settings.api_prefix)
+    app.include_router(imports_router, prefix=settings.api_prefix)
     app.include_router(inventory_router, prefix=settings.api_prefix)
     app.include_router(timeline_router, prefix=settings.api_prefix)
     app.include_router(notifications_router, prefix=settings.api_prefix)
@@ -241,6 +243,8 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/notifications/upcoming-steps").status_code == 401
     assert client.get("/api/v1/observability/metrics").status_code == 401
     assert client.get("/api/v1/analytics/overview").status_code == 401
+    assert client.get("/api/v1/imports/recipes/catalog").status_code == 401
+    assert client.post("/api/v1/imports/recipes/import").status_code == 401
     assert client.get("/api/v1/batches/1/recipe-snapshot").status_code == 401
     assert client.get("/api/v1/batches/1/inventory/preview").status_code == 401
     assert client.post("/api/v1/batches/1/inventory/consume").status_code == 401
@@ -922,3 +926,100 @@ def test_batch_inventory_consume_returns_shortages(client: TestClient) -> None:
     assert detail["shortage_count"] == 3
     assert detail["detail"] == "Insufficient inventory to consume this batch."
     assert len(detail["shortages"]) == 3
+
+
+def test_external_recipe_catalog_and_import_flow(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="import-recipe-user", email="import-recipe-user@example.com")
+
+    catalog_response = client.get("/api/v1/imports/recipes/catalog", headers=headers)
+    assert catalog_response.status_code == 200
+    catalog = catalog_response.json()
+    assert catalog["count"] >= 1
+    assert len(catalog["items"]) >= 1
+
+    item = catalog["items"][0]
+
+    import_response = client.post(
+        "/api/v1/imports/recipes/import",
+        json={"provider": item["provider"], "external_id": item["external_id"]},
+        headers=headers,
+    )
+    assert import_response.status_code == 201
+    imported = import_response.json()
+    assert imported["provider"] == item["provider"]
+    assert imported["external_id"] == item["external_id"]
+    assert imported["recipe_name"] == item["name"]
+
+    recipe_id = imported["recipe_id"]
+    recipe_response = client.get(f"/api/v1/recipes/{recipe_id}", headers=headers)
+    assert recipe_response.status_code == 200
+    recipe = recipe_response.json()
+    assert recipe["name"] == item["name"]
+    assert recipe["style"] == item["style"]
+    assert len(recipe["ingredients"]) == len(item["ingredients"])
+
+
+
+def test_external_equipment_catalog_import_and_scope(client: TestClient) -> None:
+    headers_a = _register_and_get_headers(client, username="import-equip-a", email="import-equip-a@example.com")
+    headers_b = _register_and_get_headers(client, username="import-equip-b", email="import-equip-b@example.com")
+
+    catalog_response = client.get("/api/v1/imports/equipment/catalog", headers=headers_a)
+    assert catalog_response.status_code == 200
+    catalog = catalog_response.json()
+    assert catalog["count"] >= 1
+
+    item = catalog["items"][0]
+
+    import_response = client.post(
+        "/api/v1/imports/equipment/import",
+        json={"provider": item["provider"], "external_id": item["external_id"]},
+        headers=headers_a,
+    )
+    assert import_response.status_code == 201
+    imported = import_response.json()
+    equipment_id = imported["equipment_profile"]["id"]
+
+    list_a = client.get("/api/v1/imports/equipment", headers=headers_a)
+    assert list_a.status_code == 200
+    assert len(list_a.json()) == 1
+
+    get_a = client.get(f"/api/v1/imports/equipment/{equipment_id}", headers=headers_a)
+    assert get_a.status_code == 200
+    assert get_a.json()["name"] == item["name"]
+
+    list_b = client.get("/api/v1/imports/equipment", headers=headers_b)
+    assert list_b.status_code == 200
+    assert list_b.json() == []
+
+    get_b = client.get(f"/api/v1/imports/equipment/{equipment_id}", headers=headers_b)
+    assert get_b.status_code == 404
+
+    duplicate_import = client.post(
+        "/api/v1/imports/equipment/import",
+        json={"provider": item["provider"], "external_id": item["external_id"]},
+        headers=headers_a,
+    )
+    assert duplicate_import.status_code == 409
+
+
+
+def test_external_import_not_found_cases(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="import-missing", email="import-missing@example.com")
+
+    missing_recipe = client.post(
+        "/api/v1/imports/recipes/import",
+        json={"provider": "missing", "external_id": "x"},
+        headers=headers,
+    )
+    assert missing_recipe.status_code == 404
+
+    missing_equipment = client.post(
+        "/api/v1/imports/equipment/import",
+        json={"provider": "missing", "external_id": "x"},
+        headers=headers,
+    )
+    assert missing_equipment.status_code == 404
+
+    missing_equipment_profile = client.get("/api/v1/imports/equipment/9999", headers=headers)
+    assert missing_equipment_profile.status_code == 404

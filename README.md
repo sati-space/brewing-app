@@ -59,6 +59,7 @@ Examples:
 - `codex/ba-10`
 - `codex/ba-11`
 - `codex/ba-12`
+- `codex/ba-13`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -144,6 +145,17 @@ The adapter uses an OpenAI-compatible `POST /v1/chat/completions` interface.
 - `POST /api/v1/batches/{batch_id}/inventory/consume`
 
 The preview endpoint compares snapshot ingredient requirements against current inventory with unit conversion support (for example `g` <-> `kg`).
+
+## External Import Endpoints
+
+- `GET /api/v1/imports/recipes/catalog`
+- `POST /api/v1/imports/recipes/import`
+- `GET /api/v1/imports/equipment/catalog`
+- `POST /api/v1/imports/equipment/import`
+- `GET /api/v1/imports/equipment`
+- `GET /api/v1/imports/equipment/{equipment_id}`
+
+Current providers in `ba-13` are adapter-backed template sources (`brewbench`, `craftdb`) so we can later switch to live external APIs without changing endpoint contracts.
 
 ## Timeline endpoints
 
