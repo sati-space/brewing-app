@@ -270,6 +270,7 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/batches/1/inventory/preview").status_code == 401
     assert client.post("/api/v1/batches/1/inventory/consume").status_code == 401
     assert client.post("/api/v1/batches/1/brew-plan").status_code == 401
+    assert client.post("/api/v1/batches/1/brew-plan/apply-timeline").status_code == 401
     assert client.get("/api/v1/batches/1/fermentation/trend").status_code == 401
 
     create_response = client.post(
@@ -650,6 +651,7 @@ def test_not_found_cases(client: TestClient) -> None:
     assert client.get("/api/v1/batches/9999/inventory/preview", headers=headers).status_code == 404
     assert client.post("/api/v1/batches/9999/inventory/consume", headers=headers).status_code == 404
     assert client.post("/api/v1/batches/9999/brew-plan", headers=headers).status_code == 404
+    assert client.post("/api/v1/batches/9999/brew-plan/apply-timeline", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/readings", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/fermentation/trend", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/timeline/steps", headers=headers).status_code == 404
@@ -1981,3 +1983,137 @@ def test_brew_plan_without_water_profile(client: TestClient) -> None:
     assert body["water_recommendation"] is None
     assert any("No water profile selected" in note for note in body["notes"])
     assert body["inventory_shortage_count"] == 0
+
+
+def test_brew_plan_apply_timeline_creates_and_replaces_pending_steps(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="brew-apply-user", email="brew-apply-user@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+    batch_id = _create_batch(client, headers, recipe_id, "Apply Timeline Batch", status="planned")
+
+    _create_inventory_item(
+        client,
+        headers,
+        name="Pale Malt",
+        ingredient_type="grain",
+        quantity=5.0,
+        unit="kg",
+        low_stock_threshold=1.0,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="Citra",
+        ingredient_type="hop",
+        quantity=80.0,
+        unit="g",
+        low_stock_threshold=15.0,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="US-05",
+        ingredient_type="yeast",
+        quantity=2.0,
+        unit="pack",
+        low_stock_threshold=1.0,
+    )
+
+    first_apply = client.post(
+        f"/api/v1/batches/{batch_id}/brew-plan/apply-timeline",
+        json={"brew_start_at": "2026-03-02T08:00:00"},
+        headers=headers,
+    )
+    assert first_apply.status_code == 200
+    first_body = first_apply.json()
+    assert first_body["deleted_step_count"] == 0
+    assert first_body["preserved_step_count"] == 0
+    assert first_body["created_step_count"] >= 6
+    assert len(first_body["steps"]) == first_body["created_step_count"]
+    assert first_body["steps"][0]["step_order"] == 1
+
+    list_after_first = client.get(f"/api/v1/batches/{batch_id}/timeline/steps", headers=headers)
+    assert list_after_first.status_code == 200
+    assert len(list_after_first.json()) == first_body["created_step_count"]
+
+    second_apply = client.post(
+        f"/api/v1/batches/{batch_id}/brew-plan/apply-timeline",
+        json={"brew_start_at": "2026-03-02T09:00:00"},
+        headers=headers,
+    )
+    assert second_apply.status_code == 200
+    second_body = second_apply.json()
+    assert second_body["deleted_step_count"] == first_body["created_step_count"]
+    assert second_body["preserved_step_count"] == 0
+    assert second_body["created_step_count"] >= 6
+
+    list_after_second = client.get(f"/api/v1/batches/{batch_id}/timeline/steps", headers=headers)
+    assert list_after_second.status_code == 200
+    steps_after_second = list_after_second.json()
+    assert len(steps_after_second) == second_body["created_step_count"]
+    assert steps_after_second[0]["step_order"] == 1
+    assert steps_after_second[0]["status"] == "pending"
+
+
+def test_brew_plan_apply_timeline_preserves_completed_steps(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="brew-apply-keep", email="brew-apply-keep@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+    batch_id = _create_batch(client, headers, recipe_id, "Apply Keep Batch", status="planned")
+
+    _create_inventory_item(
+        client,
+        headers,
+        name="Pale Malt",
+        ingredient_type="grain",
+        quantity=5.0,
+        unit="kg",
+        low_stock_threshold=1.0,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="Citra",
+        ingredient_type="hop",
+        quantity=80.0,
+        unit="g",
+        low_stock_threshold=15.0,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="US-05",
+        ingredient_type="yeast",
+        quantity=2.0,
+        unit="pack",
+        low_stock_threshold=1.0,
+    )
+
+    first_apply = client.post(
+        f"/api/v1/batches/{batch_id}/brew-plan/apply-timeline",
+        json={"brew_start_at": "2026-03-03T08:00:00"},
+        headers=headers,
+    )
+    assert first_apply.status_code == 200
+    first_steps = first_apply.json()["steps"]
+    first_step_id = first_steps[0]["step_id"]
+
+    complete_first = client.patch(
+        f"/api/v1/batches/{batch_id}/timeline/steps/{first_step_id}",
+        json={"status": "completed"},
+        headers=headers,
+    )
+    assert complete_first.status_code == 200
+
+    second_apply = client.post(
+        f"/api/v1/batches/{batch_id}/brew-plan/apply-timeline",
+        json={"brew_start_at": "2026-03-03T09:00:00"},
+        headers=headers,
+    )
+    assert second_apply.status_code == 200
+    second_body = second_apply.json()
+    assert second_body["preserved_step_count"] >= 1
+    assert second_body["deleted_step_count"] >= 1
+
+    timeline_steps = client.get(f"/api/v1/batches/{batch_id}/timeline/steps", headers=headers)
+    assert timeline_steps.status_code == 200
+    statuses = [step["status"] for step in timeline_steps.json()]
+    assert "completed" in statuses

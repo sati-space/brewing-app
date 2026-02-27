@@ -251,3 +251,30 @@ class BrewPlanRead(BaseModel):
     water_recommendation: BrewPlanWaterRead | None
     timer_plan: list[BrewPlanStepRead] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+
+
+class BrewPlanApplyTimelineRequest(BrewPlanRequest):
+    replace_existing_pending_steps: bool = True
+    include_shopping_step: bool = True
+    include_water_step: bool = True
+
+
+class BrewPlanAppliedStepRead(BaseModel):
+    step_id: int
+    step_order: int
+    timer_key: str
+    name: str
+    status: str
+    scheduled_for: datetime | None
+    duration_minutes: int | None
+    target_temp_c: float | None
+
+
+class BrewPlanApplyTimelineRead(BaseModel):
+    batch_id: int
+    generated_at: datetime
+    deleted_step_count: int
+    preserved_step_count: int
+    created_step_count: int
+    steps: list[BrewPlanAppliedStepRead] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
