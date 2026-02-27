@@ -180,6 +180,7 @@ def recommend_water_adjustments(
         water_profile=water_profile,
         style=style,
         batch_volume_liters=payload.batch_volume_liters,
+        language=current_user.preferred_language,
     )
 
     return WaterRecommendationRead(

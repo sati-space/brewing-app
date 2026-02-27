@@ -17,6 +17,7 @@ from app.schemas.batch import (
     BrewPlanVolumeRead,
 )
 from app.services.hop_substitution import recommend_hop_substitutions
+from app.services.preferences import t
 from app.services.recipe_calculator import estimate_abv
 
 _FERMENTABLE_TYPES = {"grain", "extract", "sugar"}
@@ -61,6 +62,7 @@ def build_brew_day_plan(
     inventory_hop_names: list[str],
     extra_available_hops: list[str],
     brew_start_at: datetime | None,
+    language: str,
 ) -> BrewPlanResult:
     notes: list[str] = []
     equipment_summary = _build_equipment_summary(equipment=equipment)
@@ -88,7 +90,7 @@ def build_brew_day_plan(
     if equipment and equipment.mash_tun_volume_liters:
         max_mash_water = round(equipment.mash_tun_volume_liters * 0.9, 2)
         if mash_water_liters > max_mash_water and max_mash_water > 0:
-            notes.append("Mash water exceeds mash tun practical limit; mash water was reduced.")
+            notes.append(t("mash_water_limit", language))
             mash_water_liters = max_mash_water
 
     grain_absorption_liters = round(grain_bill_kg * 0.8, 2)
@@ -102,7 +104,7 @@ def build_brew_day_plan(
     total_water_liters = round(mash_water_liters + sparge_water_liters, 2)
 
     if equipment and equipment.boil_kettle_volume_liters and pre_boil_volume_liters > equipment.boil_kettle_volume_liters:
-        notes.append("Pre-boil volume exceeds boil kettle capacity; split boil or reduce batch size.")
+        notes.append(t("boil_kettle_limit", language))
 
     strike_temp_c = _estimate_strike_temp(mash_temp_c=mash_temp_c, mash_ratio_l_per_kg=mash_ratio_l_per_kg)
     sparge_minutes = _estimate_sparge_minutes(sparge_water_liters=sparge_water_liters)
@@ -116,6 +118,7 @@ def build_brew_day_plan(
         sparge_minutes=sparge_minutes,
         boil_minutes=boil_minutes,
         brew_start_at=brew_start_at,
+        language=language,
     )
 
     available_hops = [name for name in [*extra_available_hops, *inventory_hop_names] if name.strip()]
@@ -125,9 +128,9 @@ def build_brew_day_plan(
     )
 
     if not shopping_list:
-        notes.append("Inventory can cover all planned ingredients for this brew day.")
+        notes.append(t("inventory_cover_all", language))
     if not substitutions:
-        notes.append("No hop substitutions were needed.")
+        notes.append(t("no_hop_subs", language))
 
     volumes = BrewPlanVolumeRead(
         grain_bill_kg=round(grain_bill_kg, 3),
@@ -277,6 +280,7 @@ def _build_timer_plan(
     sparge_minutes: int,
     boil_minutes: int,
     brew_start_at: datetime | None,
+    language: str,
 ) -> list[BrewPlanStepRead]:
     steps: list[tuple[str, str, int, float | None]] = []
 
@@ -284,20 +288,20 @@ def _build_timer_plan(
         heat_minutes = max(15, min(55, int(round(mash_water_liters * 1.7))))
         steps.extend(
             [
-                ("heat_strike", "Heat strike water", heat_minutes, strike_temp_c),
-                ("mash_in", "Mash in", 10, mash_temp_c),
-                ("mash_rest", "Mash rest", mash_rest_minutes, mash_temp_c),
-                ("sparge", "Vorlauf and sparge", sparge_minutes, 76.0),
+                ("heat_strike", t("step_heat_strike", language), heat_minutes, strike_temp_c),
+                ("mash_in", t("step_mash_in", language), 10, mash_temp_c),
+                ("mash_rest", t("step_mash_rest", language), mash_rest_minutes, mash_temp_c),
+                ("sparge", t("step_sparge", language), sparge_minutes, 76.0),
             ]
         )
 
     bring_to_boil_minutes = max(15, min(50, int(round(max(pre_boil_volume_liters, 5.0) * 1.2))))
     steps.extend(
         [
-            ("heat_boil", "Bring wort to boil", bring_to_boil_minutes, 100.0),
-            ("boil", "Boil", boil_minutes, 100.0),
-            ("chill", "Chill wort", 20, 20.0),
-            ("transfer_pitch", "Transfer and pitch yeast", 15, None),
+            ("heat_boil", t("step_heat_boil", language), bring_to_boil_minutes, 100.0),
+            ("boil", t("step_boil", language), boil_minutes, 100.0),
+            ("chill", t("step_chill", language), 20, 20.0),
+            ("transfer_pitch", t("step_transfer_pitch", language), 15, None),
         ]
     )
 

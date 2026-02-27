@@ -21,7 +21,9 @@ from app.schemas.batch import (
     BatchInventoryConsumeRead,
     BatchInventoryPreviewRead,
     BrewPlanMineralAdditionRead,
-    BrewPlanRead,
+    BrewPlanDisplayRead,
+    BrewPlanDisplayUnitsRead,
+    BrewPlanLocalizedRead,
     BrewPlanRequest,
     BrewPlanWaterIonRead,
     BrewPlanWaterRead,
@@ -37,6 +39,7 @@ from app.services.bjcp_styles import resolve_bjcp_style
 from app.services.brew_plan import build_brew_day_plan
 from app.services.fermentation import build_fermentation_trend
 from app.services.inventory_consumption import build_inventory_preview, consume_inventory_for_batch
+from app.services.preferences import resolve_language, resolve_unit_system, t, to_display_units
 from app.services.water_recommendation import build_water_recommendation
 
 router = APIRouter(prefix="/batches", tags=["batches"])
@@ -77,7 +80,10 @@ def _compose_brew_plan(
     recipe: Recipe,
     current_user: User,
     payload: BrewPlanRequest,
-) -> BrewPlanRead:
+) -> BrewPlanLocalizedRead:
+    language = resolve_language(payload.language, current_user.preferred_language)
+    unit_system = resolve_unit_system(payload.unit_system, current_user.preferred_unit_system)
+
     equipment: EquipmentProfile | None = None
     if payload.equipment_profile_id is not None:
         equipment = (
@@ -113,6 +119,7 @@ def _compose_brew_plan(
         inventory_hop_names=inventory_hop_names,
         extra_available_hops=payload.available_hop_names,
         brew_start_at=payload.brew_start_at,
+        language=language,
     )
 
     style_identifier = payload.style_code or batch.recipe_style_snapshot or recipe.style
@@ -132,12 +139,13 @@ def _compose_brew_plan(
 
         style = resolve_bjcp_style(style_identifier)
         if style is None:
-            notes.append("Water recommendation skipped because the batch style is not mapped to BJCP data.")
+            notes.append(t("water_style_unmapped", language))
         else:
             water_plan = build_water_recommendation(
                 water_profile=water_profile,
                 style=style,
                 batch_volume_liters=batch.volume_liters,
+                language=language,
             )
             water_recommendation = BrewPlanWaterRead(
                 water_profile_id=water_profile.id,
@@ -151,13 +159,21 @@ def _compose_brew_plan(
                 notes=list(water_plan.notes),
             )
     else:
-        notes.append("No water profile selected; water chemistry recommendation not included.")
+        notes.append(t("no_water_profile", language))
 
-    return BrewPlanRead(
+    display_units, display = to_display_units(
+        unit_system=unit_system,
+        language=language,
+        volumes=core_plan.volumes,
+    )
+
+    return BrewPlanLocalizedRead(
         batch_id=batch.id,
         batch_name=batch.name,
         style=style_identifier,
         generated_at=datetime.utcnow(),
+        unit_system=unit_system,
+        language=language,
         volumes=core_plan.volumes,
         gravity=core_plan.gravity,
         equipment=core_plan.equipment,
@@ -167,6 +183,8 @@ def _compose_brew_plan(
         water_recommendation=water_recommendation,
         timer_plan=core_plan.timer_plan,
         notes=notes,
+        display_units=BrewPlanDisplayUnitsRead(**display_units.model_dump()),
+        display=BrewPlanDisplayRead(**display.model_dump()),
     )
 
 
@@ -265,13 +283,13 @@ def consume_batch_inventory(
     return result
 
 
-@router.post("/{batch_id}/brew-plan", response_model=BrewPlanRead)
+@router.post("/{batch_id}/brew-plan", response_model=BrewPlanLocalizedRead)
 def generate_brew_plan(
     batch_id: int,
     payload: BrewPlanRequest = Body(default_factory=BrewPlanRequest),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> BrewPlanRead:
+) -> BrewPlanLocalizedRead:
     batch = _get_user_batch_or_404(db, batch_id=batch_id, user_id=current_user.id)
     recipe = _get_user_recipe_or_404(db, recipe_id=batch.recipe_id, user_id=current_user.id)
     return _compose_brew_plan(
@@ -326,13 +344,13 @@ def apply_brew_plan_to_timeline(
         shopping_names = ", ".join(item.name for item in brew_plan.shopping_list[:5])
         description = f"Missing ingredients: {shopping_names}."
         prep_scheduled = payload.brew_start_at - timedelta(minutes=45) if payload.brew_start_at else None
-        prep_steps.append(("shopping", "Resolve ingredient gaps", description, prep_scheduled, 20, None))
+        prep_steps.append(("shopping", t("step_shopping", brew_plan.language), description, prep_scheduled, 20, None))
 
     if payload.include_water_step and brew_plan.water_recommendation and brew_plan.water_recommendation.additions:
         addition_names = ", ".join(item.mineral_name for item in brew_plan.water_recommendation.additions[:4])
         description = f"Prepare additions: {addition_names}."
         water_scheduled = payload.brew_start_at - timedelta(minutes=20) if payload.brew_start_at else None
-        prep_steps.append(("water_adjust", "Prepare water additions", description, water_scheduled, 15, None))
+        prep_steps.append(("water_adjust", t("step_water_adjust", brew_plan.language), description, water_scheduled, 15, None))
 
     for timer_key, name, description, scheduled_for, duration_minutes, target_temp_c in prep_steps:
         step = BrewStep(
@@ -387,7 +405,7 @@ def apply_brew_plan_to_timeline(
     ]
 
     notes = list(brew_plan.notes)
-    notes.append("Brew-plan steps were applied to timeline as pending items.")
+    notes.append(t("timeline_applied", brew_plan.language))
 
     return BrewPlanApplyTimelineRead(
         batch_id=batch.id,

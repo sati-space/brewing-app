@@ -67,6 +67,7 @@ Examples:
 - `codex/ba-18`
 - `codex/ba-19`
 - `codex/ba-20`
+- `codex/ba-21`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -93,6 +94,11 @@ API docs:
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
+- `PATCH /api/v1/auth/me/preferences`
+
+Preference updates support:
+- `preferred_unit_system`: `metric` or `imperial`
+- `preferred_language`: `en` or `es`
 
 All recipe, batch, ingredient, imports, analytics, AI, inventory, timeline, notifications, and observability endpoints require `Authorization: Bearer <token>` except `GET /api/v1/health`.
 
@@ -208,6 +214,7 @@ The brew-plan endpoint returns brew-day calculations and planner output:
 - hop substitution candidates from available inventory/provider inputs
 - optional water chemistry recommendations (when `water_profile_id` is provided)
 - timer-ready step schedule (`timer_key`, durations, offsets, optional planned timestamps)
+- localized text (`en`/`es`) and unit-aware display block (`metric`/`imperial`) based on user preference or per-request override (`language`, `unit_system`)
 
 `POST /api/v1/batches/{batch_id}/brew-plan/apply-timeline` materializes the generated plan into timeline steps (with replacement of pending/skipped steps by default), so the frontend timer can run directly on persisted timeline rows.
 

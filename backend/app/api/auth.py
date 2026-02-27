@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import create_access_token, get_current_user, hash_password, verify_password
 from app.models.user import User
-from app.schemas.auth import TokenResponse, UserLogin, UserRead, UserRegister
+from app.schemas.auth import TokenResponse, UserLogin, UserPreferencesUpdate, UserRead, UserRegister
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -41,4 +41,21 @@ def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenResponse:
 
 @router.get("/me", response_model=UserRead)
 def get_me(current_user: User = Depends(get_current_user)) -> User:
+    return current_user
+
+
+@router.patch("/me/preferences", response_model=UserRead)
+def update_preferences(
+    payload: UserPreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if payload.preferred_unit_system is not None:
+        current_user.preferred_unit_system = payload.preferred_unit_system
+    if payload.preferred_language is not None:
+        current_user.preferred_language = payload.preferred_language
+
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
     return current_user

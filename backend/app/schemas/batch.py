@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -136,6 +137,8 @@ class BrewPlanRequest(BaseModel):
     style_code: str | None = Field(default=None, min_length=1, max_length=20)
     available_hop_names: list[str] = Field(default_factory=list, max_length=50)
     brew_start_at: datetime | None = None
+    unit_system: Literal["metric", "imperial"] | None = None
+    language: Literal["en", "es"] | None = None
 
 
 class BrewPlanVolumeRead(BaseModel):
@@ -242,6 +245,8 @@ class BrewPlanRead(BaseModel):
     batch_name: str
     style: str
     generated_at: datetime
+    unit_system: Literal["metric", "imperial"]
+    language: Literal["en", "es"]
     volumes: BrewPlanVolumeRead
     gravity: BrewPlanGravityRead
     equipment: BrewPlanEquipmentRead
@@ -251,6 +256,31 @@ class BrewPlanRead(BaseModel):
     water_recommendation: BrewPlanWaterRead | None
     timer_plan: list[BrewPlanStepRead] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+
+
+class BrewPlanDisplayUnitsRead(BaseModel):
+    unit_system: Literal["metric", "imperial"]
+    language: Literal["en", "es"]
+    grain_unit: str
+    volume_unit: str
+    temperature_unit: str
+
+
+class BrewPlanDisplayRead(BaseModel):
+    grain_bill: float
+    mash_water: float
+    sparge_water: float
+    total_water: float
+    pre_boil_volume: float
+    post_boil_volume: float
+    boil_off: float
+    mash_target_temp: float
+    strike_water_temp: float
+
+
+class BrewPlanLocalizedRead(BrewPlanRead):
+    display_units: BrewPlanDisplayUnitsRead
+    display: BrewPlanDisplayRead
 
 
 class BrewPlanApplyTimelineRequest(BrewPlanRequest):
