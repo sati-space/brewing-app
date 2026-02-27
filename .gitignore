@@ -7,3 +7,6 @@ __pycache__/
 backend/.env
 backend/.coverage
 backend/brewpilot.db
+frontend/node_modules/
+frontend/dist/
+frontend/.env

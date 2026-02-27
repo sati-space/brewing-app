@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     ai_llm_api_key: str | None = None
     ai_llm_model: str | None = None
     ai_llm_timeout_seconds: int = 20
+    cors_allow_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
