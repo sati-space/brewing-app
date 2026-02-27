@@ -61,6 +61,7 @@ Examples:
 - `codex/ba-12`
 - `codex/ba-13`
 - `codex/ba-14`
+- `codex/ba-15`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -114,6 +115,14 @@ Set in `backend/.env`:
 - `AI_LLM_TIMEOUT_SECONDS`
 
 The adapter uses an OpenAI-compatible `POST /v1/chat/completions` interface.
+
+## Equipment endpoints
+
+- `POST /api/v1/equipment`
+- `GET /api/v1/equipment`
+- `GET /api/v1/equipment/{equipment_id}`
+- `PUT /api/v1/equipment/{equipment_id}`
+- `DELETE /api/v1/equipment/{equipment_id}`
 
 ## Ingredient endpoints
 
