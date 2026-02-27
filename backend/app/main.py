@@ -7,6 +7,7 @@ from app.api.auth import router as auth_router
 from app.api.batches import router as batch_router
 from app.api.health import router as health_router
 from app.api.imports import router as imports_router
+from app.api.ingredients import router as ingredients_router
 from app.api.inventory import router as inventory_router
 from app.api.notifications import router as notifications_router
 from app.api.observability import router as observability_router
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     app.include_router(analytics_router, prefix=settings.api_prefix)
     app.include_router(ai_router, prefix=settings.api_prefix)
     app.include_router(imports_router, prefix=settings.api_prefix)
+    app.include_router(ingredients_router, prefix=settings.api_prefix)
     app.include_router(inventory_router, prefix=settings.api_prefix)
     app.include_router(timeline_router, prefix=settings.api_prefix)
     app.include_router(notifications_router, prefix=settings.api_prefix)

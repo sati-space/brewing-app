@@ -42,6 +42,16 @@ class ExternalEquipmentTemplate:
     notes: str
 
 
+@dataclass(frozen=True)
+class ExternalIngredientTemplate:
+    provider: str
+    external_id: str
+    name: str
+    ingredient_type: str
+    default_unit: str
+    notes: str
+
+
 _RECIPE_TEMPLATES: tuple[ExternalRecipeTemplate, ...] = (
     ExternalRecipeTemplate(
         provider="brewbench",
@@ -131,6 +141,50 @@ _EQUIPMENT_TEMPLATES: tuple[ExternalEquipmentTemplate, ...] = (
 )
 
 
+_INGREDIENT_TEMPLATES: tuple[ExternalIngredientTemplate, ...] = (
+    ExternalIngredientTemplate(
+        provider="brewbench",
+        external_id="ing-pale-malt",
+        name="Pale Malt",
+        ingredient_type="grain",
+        default_unit="kg",
+        notes="Base malt for pale ales, lagers, and most clean ale recipes.",
+    ),
+    ExternalIngredientTemplate(
+        provider="brewbench",
+        external_id="ing-crystal-60",
+        name="Crystal 60",
+        ingredient_type="grain",
+        default_unit="kg",
+        notes="Caramel malt for color and residual sweetness.",
+    ),
+    ExternalIngredientTemplate(
+        provider="brewbench",
+        external_id="ing-cascade",
+        name="Cascade",
+        ingredient_type="hop",
+        default_unit="g",
+        notes="Classic US hop with citrus and floral profile.",
+    ),
+    ExternalIngredientTemplate(
+        provider="craftdb",
+        external_id="ing-us05",
+        name="US-05",
+        ingredient_type="yeast",
+        default_unit="pack",
+        notes="Neutral American ale yeast with high attenuation.",
+    ),
+    ExternalIngredientTemplate(
+        provider="craftdb",
+        external_id="ing-eKG",
+        name="East Kent Goldings",
+        ingredient_type="hop",
+        default_unit="g",
+        notes="Traditional English aroma hop with earthy/floral character.",
+    ),
+)
+
+
 def _matches(text: str, search: str | None) -> bool:
     if not search:
         return True
@@ -168,6 +222,29 @@ def list_equipment_templates(provider: str | None = None, search: str | None = N
 
 def get_equipment_template(provider: str, external_id: str) -> ExternalEquipmentTemplate | None:
     for template in _EQUIPMENT_TEMPLATES:
+        if template.provider == provider and template.external_id == external_id:
+            return template
+    return None
+
+
+def list_ingredient_templates(
+    provider: str | None = None,
+    ingredient_type: str | None = None,
+    search: str | None = None,
+) -> list[ExternalIngredientTemplate]:
+    items = [
+        template
+        for template in _INGREDIENT_TEMPLATES
+        if (provider is None or template.provider == provider)
+        and (ingredient_type is None or template.ingredient_type == ingredient_type)
+        and (_matches(template.name, search) or _matches(template.notes, search))
+    ]
+    items.sort(key=lambda item: (item.provider, item.ingredient_type, item.name))
+    return items
+
+
+def get_ingredient_template(provider: str, external_id: str) -> ExternalIngredientTemplate | None:
+    for template in _INGREDIENT_TEMPLATES:
         if template.provider == provider and template.external_id == external_id:
             return template
     return None
