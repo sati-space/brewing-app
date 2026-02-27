@@ -64,6 +64,7 @@ Examples:
 - `codex/ba-15`
 - `codex/ba-16`
 - `codex/ba-17`
+- `codex/ba-18`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -145,6 +146,24 @@ The adapter uses an OpenAI-compatible `POST /v1/chat/completions` interface.
 - `GET /api/v1/ingredients/{ingredient_id}`
 - `PUT /api/v1/ingredients/{ingredient_id}`
 - `DELETE /api/v1/ingredients/{ingredient_id}`
+
+## Style endpoints
+
+- `GET /api/v1/styles/bjcp`
+- `GET /api/v1/styles/bjcp/{style_identifier}`
+
+Style lookup supports BJCP code (for example `21A`) or style name (for example `American IPA`) and returns water target ranges for brewing chemistry.
+
+## Water Profile endpoints
+
+- `POST /api/v1/water-profiles`
+- `GET /api/v1/water-profiles`
+- `GET /api/v1/water-profiles/{water_profile_id}`
+- `PUT /api/v1/water-profiles/{water_profile_id}`
+- `DELETE /api/v1/water-profiles/{water_profile_id}`
+- `POST /api/v1/water-profiles/{water_profile_id}/recommendations`
+
+Recommendation requests accept either `style_code` (BJCP) or `recipe_id` and return suggested mineral additions with projected ion profile.
 
 ## Inventory endpoints
 

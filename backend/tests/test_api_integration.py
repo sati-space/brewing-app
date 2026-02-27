@@ -20,7 +20,9 @@ from app.api.inventory import router as inventory_router
 from app.api.notifications import router as notifications_router
 from app.api.observability import router as observability_router
 from app.api.recipes import router as recipe_router
+from app.api.styles import router as styles_router
 from app.api.timeline import router as timeline_router
+from app.api.water_profiles import router as water_profiles_router
 from app.core.config import settings
 from app.core.database import Base, get_db
 from app.core.observability_middleware import ObservabilityMiddleware
@@ -46,6 +48,7 @@ def client() -> Generator[TestClient, None, None]:
     app.include_router(health_router, prefix=settings.api_prefix)
     app.include_router(auth_router, prefix=settings.api_prefix)
     app.include_router(recipe_router, prefix=settings.api_prefix)
+    app.include_router(styles_router, prefix=settings.api_prefix)
     app.include_router(batch_router, prefix=settings.api_prefix)
     app.include_router(analytics_router, prefix=settings.api_prefix)
     app.include_router(ai_router, prefix=settings.api_prefix)
@@ -56,6 +59,7 @@ def client() -> Generator[TestClient, None, None]:
     app.include_router(timeline_router, prefix=settings.api_prefix)
     app.include_router(notifications_router, prefix=settings.api_prefix)
     app.include_router(observability_router, prefix=settings.api_prefix)
+    app.include_router(water_profiles_router, prefix=settings.api_prefix)
 
     def override_get_db() -> Generator[Session, None, None]:
         db = testing_session_local()
@@ -249,12 +253,17 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/analytics/overview").status_code == 401
     assert client.get("/api/v1/imports/recipes/catalog").status_code == 401
     assert client.post("/api/v1/imports/recipes/import").status_code == 401
+    assert client.get("/api/v1/styles/bjcp").status_code == 401
+    assert client.get("/api/v1/styles/bjcp/21A").status_code == 401
     assert client.get("/api/v1/imports/ingredients/catalog").status_code == 401
     assert client.post("/api/v1/imports/ingredients/import").status_code == 401
     assert client.get("/api/v1/ingredients").status_code == 401
     assert client.post("/api/v1/ingredients").status_code == 401
     assert client.post("/api/v1/recipes/1/scale").status_code == 401
     assert client.post("/api/v1/recipes/1/hop-substitutions").status_code == 401
+    assert client.get("/api/v1/water-profiles").status_code == 401
+    assert client.post("/api/v1/water-profiles").status_code == 401
+    assert client.post("/api/v1/water-profiles/1/recommendations").status_code == 401
     assert client.get("/api/v1/equipment").status_code == 401
     assert client.post("/api/v1/equipment").status_code == 401
     assert client.get("/api/v1/batches/1/recipe-snapshot").status_code == 401
@@ -598,6 +607,19 @@ def test_not_found_cases(client: TestClient) -> None:
         headers=headers,
     )
     assert missing_hop_substitutions.status_code == 404
+
+    missing_water_profile = client.get("/api/v1/water-profiles/9999", headers=headers)
+    assert missing_water_profile.status_code == 404
+
+    missing_water_recommendation = client.post(
+        "/api/v1/water-profiles/9999/recommendations",
+        json={"style_code": "21A", "batch_volume_liters": 20},
+        headers=headers,
+    )
+    assert missing_water_recommendation.status_code == 404
+
+    missing_style = client.get("/api/v1/styles/bjcp/unknown", headers=headers)
+    assert missing_style.status_code == 404
 
     missing_batch_for_reading = client.post(
         "/api/v1/batches/9999/readings",
@@ -1538,3 +1560,220 @@ def test_recipe_hop_substitutions_does_not_use_other_user_inventory(client: Test
     )
     assert response.status_code == 422
     assert response.json()["detail"] == "No candidate hops found. Provide available_hop_names or add hop inventory."
+
+
+def test_bjcp_style_catalog_and_detail(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="styles-user", email="styles-user@example.com")
+
+    catalog_response = client.get("/api/v1/styles/bjcp?search=ipa", headers=headers)
+    assert catalog_response.status_code == 200
+    catalog = catalog_response.json()
+    assert catalog["count"] >= 2
+    codes = {item["code"] for item in catalog["items"]}
+    assert "21A" in codes
+
+    detail_response = client.get("/api/v1/styles/bjcp/21A", headers=headers)
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["name"] == "American IPA"
+    assert detail["sulfate_ppm"]["target_ppm"] > detail["chloride_ppm"]["target_ppm"]
+
+
+def test_water_profile_crud_and_recommendation_by_style_code(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="water-user", email="water-user@example.com")
+
+    create_response = client.post(
+        "/api/v1/water-profiles",
+        json={
+            "name": "My Tap Water",
+            "calcium_ppm": 35,
+            "magnesium_ppm": 8,
+            "sodium_ppm": 12,
+            "chloride_ppm": 30,
+            "sulfate_ppm": 45,
+            "bicarbonate_ppm": 60,
+            "notes": "city profile",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+    water_profile_id = create_response.json()["id"]
+
+    duplicate_create = client.post(
+        "/api/v1/water-profiles",
+        json={
+            "name": "My Tap Water",
+            "calcium_ppm": 40,
+            "magnesium_ppm": 8,
+            "sodium_ppm": 12,
+            "chloride_ppm": 30,
+            "sulfate_ppm": 45,
+            "bicarbonate_ppm": 60,
+            "notes": "",
+        },
+        headers=headers,
+    )
+    assert duplicate_create.status_code == 409
+
+    list_response = client.get("/api/v1/water-profiles?search=Tap", headers=headers)
+    assert list_response.status_code == 200
+    assert len(list_response.json()) == 1
+
+    recommend_response = client.post(
+        f"/api/v1/water-profiles/{water_profile_id}/recommendations",
+        json={"style_code": "21A", "batch_volume_liters": 20},
+        headers=headers,
+    )
+    assert recommend_response.status_code == 200
+    recommendation = recommend_response.json()
+    assert recommendation["style_code"] == "21A"
+    assert recommendation["water_profile_id"] == water_profile_id
+    assert len(recommendation["additions"]) >= 1
+    mineral_names = {item["mineral_name"] for item in recommendation["additions"]}
+    assert "Gypsum (CaSO4)" in mineral_names
+
+    update_response = client.put(
+        f"/api/v1/water-profiles/{water_profile_id}",
+        json={
+            "name": "My Tap Water V2",
+            "calcium_ppm": 40,
+            "magnesium_ppm": 10,
+            "sodium_ppm": 12,
+            "chloride_ppm": 35,
+            "sulfate_ppm": 55,
+            "bicarbonate_ppm": 65,
+            "notes": "updated",
+        },
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["name"] == "My Tap Water V2"
+
+    delete_response = client.delete(f"/api/v1/water-profiles/{water_profile_id}", headers=headers)
+    assert delete_response.status_code == 204
+
+    missing_after_delete = client.get(f"/api/v1/water-profiles/{water_profile_id}", headers=headers)
+    assert missing_after_delete.status_code == 404
+
+
+def test_water_recommendation_from_recipe_style(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="water-recipe-user", email="water-recipe-user@example.com")
+
+    recipe_response = client.post(
+        "/api/v1/recipes",
+        json={
+            "name": "American IPA Test",
+            "style": "21A",
+            "target_og": 1.062,
+            "target_fg": 1.011,
+            "target_ibu": 60,
+            "target_srm": 7,
+            "efficiency_pct": 72,
+            "notes": "",
+            "ingredients": [
+                {
+                    "name": "Citra",
+                    "ingredient_type": "hop",
+                    "amount": 40,
+                    "unit": "g",
+                    "stage": "boil",
+                    "minute_added": 10,
+                }
+            ],
+        },
+        headers=headers,
+    )
+    assert recipe_response.status_code == 201
+    recipe_id = recipe_response.json()["id"]
+
+    water_response = client.post(
+        "/api/v1/water-profiles",
+        json={
+            "name": "RO Blend",
+            "calcium_ppm": 10,
+            "magnesium_ppm": 2,
+            "sodium_ppm": 3,
+            "chloride_ppm": 8,
+            "sulfate_ppm": 15,
+            "bicarbonate_ppm": 20,
+            "notes": "",
+        },
+        headers=headers,
+    )
+    assert water_response.status_code == 201
+    water_profile_id = water_response.json()["id"]
+
+    recommend_response = client.post(
+        f"/api/v1/water-profiles/{water_profile_id}/recommendations",
+        json={"recipe_id": recipe_id, "batch_volume_liters": 23},
+        headers=headers,
+    )
+    assert recommend_response.status_code == 200
+    body = recommend_response.json()
+    assert body["style_code"] == "21A"
+    assert body["batch_volume_liters"] == 23.0
+    assert len(body["additions"]) >= 1
+
+
+def test_water_profiles_user_scope_and_unknown_style(client: TestClient) -> None:
+    headers_a = _register_and_get_headers(client, username="water-owner-a", email="water-owner-a@example.com")
+    headers_b = _register_and_get_headers(client, username="water-owner-b", email="water-owner-b@example.com")
+
+    water_response = client.post(
+        "/api/v1/water-profiles",
+        json={
+            "name": "Owner A Water",
+            "calcium_ppm": 25,
+            "magnesium_ppm": 5,
+            "sodium_ppm": 10,
+            "chloride_ppm": 20,
+            "sulfate_ppm": 30,
+            "bicarbonate_ppm": 50,
+            "notes": "",
+        },
+        headers=headers_a,
+    )
+    assert water_response.status_code == 201
+    water_profile_id = water_response.json()["id"]
+
+    assert client.get(f"/api/v1/water-profiles/{water_profile_id}", headers=headers_b).status_code == 404
+    assert (
+        client.post(
+            f"/api/v1/water-profiles/{water_profile_id}/recommendations",
+            json={"style_code": "21A"},
+            headers=headers_b,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.put(
+            f"/api/v1/water-profiles/{water_profile_id}",
+            json={
+                "name": "attempt",
+                "calcium_ppm": 1,
+                "magnesium_ppm": 1,
+                "sodium_ppm": 1,
+                "chloride_ppm": 1,
+                "sulfate_ppm": 1,
+                "bicarbonate_ppm": 1,
+                "notes": "",
+            },
+            headers=headers_b,
+        ).status_code
+        == 404
+    )
+
+    unknown_style_response = client.post(
+        f"/api/v1/water-profiles/{water_profile_id}/recommendations",
+        json={"style_code": "not-a-style"},
+        headers=headers_a,
+    )
+    assert unknown_style_response.status_code == 404
+
+    missing_input_response = client.post(
+        f"/api/v1/water-profiles/{water_profile_id}/recommendations",
+        json={},
+        headers=headers_a,
+    )
+    assert missing_input_response.status_code == 422
+    assert missing_input_response.json()["detail"] == "Provide style_code or recipe_id for recommendation."

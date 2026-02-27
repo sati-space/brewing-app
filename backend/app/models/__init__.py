@@ -5,6 +5,7 @@ from app.models.ingredient_profile import IngredientProfile
 from app.models.inventory import InventoryItem
 from app.models.recipe import Recipe, RecipeIngredient
 from app.models.user import User
+from app.models.water_profile import WaterProfile
 
 __all__ = [
     "Batch",
@@ -16,4 +17,5 @@ __all__ = [
     "Recipe",
     "RecipeIngredient",
     "User",
+    "WaterProfile",
 ]

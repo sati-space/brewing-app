@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.ingredient_profile import IngredientProfile
     from app.models.inventory import InventoryItem
     from app.models.recipe import Recipe
+    from app.models.water_profile import WaterProfile
 
 
 class User(Base):
@@ -32,3 +33,4 @@ class User(Base):
     brew_steps: Mapped[list[BrewStep]] = relationship(back_populates="owner")
     equipment_profiles: Mapped[list[EquipmentProfile]] = relationship(back_populates="owner")
     ingredient_profiles: Mapped[list[IngredientProfile]] = relationship(back_populates="owner")
+    water_profiles: Mapped[list[WaterProfile]] = relationship(back_populates="owner")
