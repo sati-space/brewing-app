@@ -253,6 +253,7 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.post("/api/v1/imports/ingredients/import").status_code == 401
     assert client.get("/api/v1/ingredients").status_code == 401
     assert client.post("/api/v1/ingredients").status_code == 401
+    assert client.post("/api/v1/recipes/1/scale").status_code == 401
     assert client.get("/api/v1/equipment").status_code == 401
     assert client.post("/api/v1/equipment").status_code == 401
     assert client.get("/api/v1/batches/1/recipe-snapshot").status_code == 401
@@ -582,6 +583,13 @@ def test_not_found_cases(client: TestClient) -> None:
     headers = _register_and_get_headers(client, username="brewer3", email="brewer3@example.com")
 
     assert client.get("/api/v1/recipes/9999", headers=headers).status_code == 404
+
+    missing_recipe_scale = client.post(
+        "/api/v1/recipes/9999/scale",
+        json={"source_batch_volume_liters": 20, "target_batch_volume_liters": 25},
+        headers=headers,
+    )
+    assert missing_recipe_scale.status_code == 404
 
     missing_batch_for_reading = client.post(
         "/api/v1/batches/9999/readings",
@@ -1291,3 +1299,107 @@ def test_equipment_user_scope_isolation_and_import_visibility(client: TestClient
     assert client.get(f"/api/v1/equipment/{manual_id}", headers=headers_b).status_code == 404
     assert client.get(f"/api/v1/equipment/{imported_id}", headers=headers_b).status_code == 404
     assert client.delete(f"/api/v1/equipment/{manual_id}", headers=headers_b).status_code == 404
+
+
+def test_recipe_scale_with_manual_target_efficiency(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="scale-user", email="scale-user@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+
+    scale_response = client.post(
+        f"/api/v1/recipes/{recipe_id}/scale",
+        json={
+            "source_batch_volume_liters": 20,
+            "target_batch_volume_liters": 25,
+            "target_efficiency_pct": 78,
+        },
+        headers=headers,
+    )
+    assert scale_response.status_code == 200
+    scaled = scale_response.json()
+
+    assert scaled["recipe_id"] == recipe_id
+    assert scaled["scale_factor"] == 1.25
+    assert scaled["source_efficiency_pct"] == 72.0
+    assert scaled["target_efficiency_pct"] == 78.0
+    assert scaled["estimated_target_og"] == 1.049
+    assert scaled["estimated_target_fg"] == 1.011
+
+    by_name = {item["name"]: item for item in scaled["ingredients"]}
+    assert by_name["Pale Malt"]["original_amount"] == 4.3
+    assert by_name["Pale Malt"]["scaled_amount"] == 5.375
+    assert by_name["Citra"]["scaled_amount"] == 50.0
+
+
+
+def test_recipe_scale_uses_equipment_efficiency(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="scale-equip-user", email="scale-equip-user@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+
+    equipment_response = client.post(
+        "/api/v1/equipment",
+        json={
+            "name": "Scale Rig",
+            "batch_volume_liters": 23,
+            "mash_tun_volume_liters": 32,
+            "boil_kettle_volume_liters": 38,
+            "brewhouse_efficiency_pct": 68,
+            "boil_off_rate_l_per_hour": 2.9,
+            "trub_loss_liters": 1.1,
+            "notes": "",
+        },
+        headers=headers,
+    )
+    assert equipment_response.status_code == 201
+    equipment_id = equipment_response.json()["id"]
+
+    scale_response = client.post(
+        f"/api/v1/recipes/{recipe_id}/scale",
+        json={
+            "source_batch_volume_liters": 20,
+            "target_batch_volume_liters": 23,
+            "equipment_profile_id": equipment_id,
+        },
+        headers=headers,
+    )
+    assert scale_response.status_code == 200
+    scaled = scale_response.json()
+
+    assert scaled["target_efficiency_pct"] == 68.0
+    assert scaled["scale_factor"] == 1.15
+    assert scaled["estimated_target_og"] == 1.042
+
+
+
+def test_recipe_scale_rejects_other_user_equipment(client: TestClient) -> None:
+    headers_a = _register_and_get_headers(client, username="scale-owner-a", email="scale-owner-a@example.com")
+    headers_b = _register_and_get_headers(client, username="scale-owner-b", email="scale-owner-b@example.com")
+
+    recipe_id = _create_recipe(client, headers=headers_a)
+
+    equipment_response = client.post(
+        "/api/v1/equipment",
+        json={
+            "name": "Owner B Rig",
+            "batch_volume_liters": 20,
+            "mash_tun_volume_liters": 28,
+            "boil_kettle_volume_liters": 35,
+            "brewhouse_efficiency_pct": 70,
+            "boil_off_rate_l_per_hour": 3.0,
+            "trub_loss_liters": 1.2,
+            "notes": "",
+        },
+        headers=headers_b,
+    )
+    assert equipment_response.status_code == 201
+    equipment_id = equipment_response.json()["id"]
+
+    scale_response = client.post(
+        f"/api/v1/recipes/{recipe_id}/scale",
+        json={
+            "source_batch_volume_liters": 20,
+            "target_batch_volume_liters": 25,
+            "equipment_profile_id": equipment_id,
+        },
+        headers=headers_a,
+    )
+    assert scale_response.status_code == 404

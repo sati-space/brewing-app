@@ -3,11 +3,27 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.models.equipment_profile import EquipmentProfile
 from app.models.recipe import Recipe, RecipeIngredient
 from app.models.user import User
-from app.schemas.recipe import RecipeCreate, RecipeRead
+from app.schemas.recipe import RecipeCreate, RecipeRead, RecipeScaleRead, RecipeScaleRequest
+from app.services.recipe_scaling import build_scaled_recipe
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
+
+
+def _get_user_recipe_or_404(db: Session, recipe_id: int, user_id: int) -> Recipe:
+    recipe = (
+        db.query(Recipe)
+        .filter(
+            Recipe.id == recipe_id,
+            Recipe.owner_user_id == user_id,
+        )
+        .first()
+    )
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return recipe
 
 
 @router.post("", response_model=RecipeRead, status_code=201)
@@ -65,14 +81,40 @@ def get_recipe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Recipe:
-    recipe = (
-        db.query(Recipe)
-        .filter(
-            Recipe.id == recipe_id,
-            Recipe.owner_user_id == current_user.id,
+    return _get_user_recipe_or_404(db, recipe_id=recipe_id, user_id=current_user.id)
+
+
+@router.post("/{recipe_id}/scale", response_model=RecipeScaleRead)
+def scale_recipe(
+    recipe_id: int,
+    payload: RecipeScaleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecipeScaleRead:
+    recipe = _get_user_recipe_or_404(db, recipe_id=recipe_id, user_id=current_user.id)
+
+    target_efficiency_pct = payload.target_efficiency_pct
+    if payload.equipment_profile_id is not None:
+        equipment = (
+            db.query(EquipmentProfile)
+            .filter(
+                EquipmentProfile.id == payload.equipment_profile_id,
+                EquipmentProfile.owner_user_id == current_user.id,
+            )
+            .first()
         )
-        .first()
+        if not equipment:
+            raise HTTPException(status_code=404, detail="Equipment profile not found")
+
+        if target_efficiency_pct is None:
+            target_efficiency_pct = equipment.brewhouse_efficiency_pct
+
+    if target_efficiency_pct is None:
+        target_efficiency_pct = recipe.efficiency_pct
+
+    return build_scaled_recipe(
+        recipe,
+        source_batch_volume_liters=payload.source_batch_volume_liters,
+        target_batch_volume_liters=payload.target_batch_volume_liters,
+        target_efficiency_pct=target_efficiency_pct,
     )
-    if not recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-    return recipe
