@@ -13,7 +13,9 @@ from app.api.inventory import router as inventory_router
 from app.api.notifications import router as notifications_router
 from app.api.observability import router as observability_router
 from app.api.recipes import router as recipe_router
+from app.api.styles import router as styles_router
 from app.api.timeline import router as timeline_router
+from app.api.water_profiles import router as water_profiles_router
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.core.observability_middleware import ObservabilityMiddleware
@@ -30,6 +32,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix=settings.api_prefix)
     app.include_router(auth_router, prefix=settings.api_prefix)
     app.include_router(recipe_router, prefix=settings.api_prefix)
+    app.include_router(styles_router, prefix=settings.api_prefix)
     app.include_router(batch_router, prefix=settings.api_prefix)
     app.include_router(analytics_router, prefix=settings.api_prefix)
     app.include_router(ai_router, prefix=settings.api_prefix)
@@ -40,6 +43,7 @@ def create_app() -> FastAPI:
     app.include_router(timeline_router, prefix=settings.api_prefix)
     app.include_router(notifications_router, prefix=settings.api_prefix)
     app.include_router(observability_router, prefix=settings.api_prefix)
+    app.include_router(water_profiles_router, prefix=settings.api_prefix)
     return app
 
 
