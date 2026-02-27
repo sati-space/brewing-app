@@ -4,6 +4,7 @@ from app.schemas.batch import BrewPlanDisplayRead, BrewPlanDisplayUnitsRead, Bre
 
 SUPPORTED_UNIT_SYSTEMS = {"metric", "imperial"}
 SUPPORTED_LANGUAGES = {"en", "es"}
+SUPPORTED_TEMPERATURE_UNITS = {"C", "F"}
 
 _TRANSLATIONS: dict[str, dict[str, str]] = {
     "en": {
@@ -71,11 +72,34 @@ def resolve_language(override: str | None, preferred: str | None) -> str:
     return "en"
 
 
+def resolve_temperature_unit(override: str | None, preferred: str | None, unit_system: str) -> str:
+    if override and override.upper() in SUPPORTED_TEMPERATURE_UNITS:
+        return override.upper()
+    if preferred and preferred.upper() in SUPPORTED_TEMPERATURE_UNITS:
+        return preferred.upper()
+    return "F" if unit_system == "imperial" else "C"
+
+
 def t(key: str, language: str) -> str:
     return _TRANSLATIONS.get(language, _TRANSLATIONS["en"]).get(key, _TRANSLATIONS["en"].get(key, key))
 
 
-def to_display_units(*, unit_system: str, language: str, volumes: BrewPlanVolumeRead) -> tuple[BrewPlanDisplayUnitsRead, BrewPlanDisplayRead]:
+def to_display_units(
+    *,
+    unit_system: str,
+    language: str,
+    temperature_unit: str,
+    volumes: BrewPlanVolumeRead,
+) -> tuple[BrewPlanDisplayUnitsRead, BrewPlanDisplayRead]:
+    temp_unit = temperature_unit.upper()
+    if temp_unit not in SUPPORTED_TEMPERATURE_UNITS:
+        temp_unit = "F" if unit_system == "imperial" else "C"
+
+    def convert_temp(value_c: float) -> float:
+        if temp_unit == "F":
+            return round((value_c * 9.0 / 5.0) + 32.0, 2)
+        return value_c
+
     if unit_system == "imperial":
         return (
             BrewPlanDisplayUnitsRead(
@@ -83,7 +107,7 @@ def to_display_units(*, unit_system: str, language: str, volumes: BrewPlanVolume
                 language=language,
                 grain_unit="lb",
                 volume_unit="gal",
-                temperature_unit="F",
+                temperature_unit=temp_unit,
             ),
             BrewPlanDisplayRead(
                 grain_bill=round(volumes.grain_bill_kg * 2.20462262, 3),
@@ -93,8 +117,8 @@ def to_display_units(*, unit_system: str, language: str, volumes: BrewPlanVolume
                 pre_boil_volume=round(volumes.pre_boil_volume_liters * 0.264172052, 3),
                 post_boil_volume=round(volumes.post_boil_volume_liters * 0.264172052, 3),
                 boil_off=round(volumes.estimated_boil_off_liters * 0.264172052, 3),
-                mash_target_temp=round((volumes.mash_target_temp_c * 9.0 / 5.0) + 32.0, 2),
-                strike_water_temp=round((volumes.strike_water_temp_c * 9.0 / 5.0) + 32.0, 2),
+                mash_target_temp=convert_temp(volumes.mash_target_temp_c),
+                strike_water_temp=convert_temp(volumes.strike_water_temp_c),
             ),
         )
 
@@ -104,7 +128,7 @@ def to_display_units(*, unit_system: str, language: str, volumes: BrewPlanVolume
             language=language,
             grain_unit="kg",
             volume_unit="L",
-            temperature_unit="C",
+            temperature_unit=temp_unit,
         ),
         BrewPlanDisplayRead(
             grain_bill=volumes.grain_bill_kg,
@@ -114,7 +138,7 @@ def to_display_units(*, unit_system: str, language: str, volumes: BrewPlanVolume
             pre_boil_volume=volumes.pre_boil_volume_liters,
             post_boil_volume=volumes.post_boil_volume_liters,
             boil_off=volumes.estimated_boil_off_liters,
-            mash_target_temp=volumes.mash_target_temp_c,
-            strike_water_temp=volumes.strike_water_temp_c,
+            mash_target_temp=convert_temp(volumes.mash_target_temp_c),
+            strike_water_temp=convert_temp(volumes.strike_water_temp_c),
         ),
     )

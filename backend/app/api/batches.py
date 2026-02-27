@@ -39,7 +39,7 @@ from app.services.bjcp_styles import resolve_bjcp_style
 from app.services.brew_plan import build_brew_day_plan
 from app.services.fermentation import build_fermentation_trend
 from app.services.inventory_consumption import build_inventory_preview, consume_inventory_for_batch
-from app.services.preferences import resolve_language, resolve_unit_system, t, to_display_units
+from app.services.preferences import resolve_language, resolve_temperature_unit, resolve_unit_system, t, to_display_units
 from app.services.water_recommendation import build_water_recommendation
 
 router = APIRouter(prefix="/batches", tags=["batches"])
@@ -83,6 +83,11 @@ def _compose_brew_plan(
 ) -> BrewPlanLocalizedRead:
     language = resolve_language(payload.language, current_user.preferred_language)
     unit_system = resolve_unit_system(payload.unit_system, current_user.preferred_unit_system)
+    temperature_unit = resolve_temperature_unit(
+        payload.temperature_unit,
+        current_user.preferred_temperature_unit,
+        unit_system,
+    )
 
     equipment: EquipmentProfile | None = None
     if payload.equipment_profile_id is not None:
@@ -164,6 +169,7 @@ def _compose_brew_plan(
     display_units, display = to_display_units(
         unit_system=unit_system,
         language=language,
+        temperature_unit=temperature_unit,
         volumes=core_plan.volumes,
     )
 
@@ -173,6 +179,7 @@ def _compose_brew_plan(
         style=style_identifier,
         generated_at=datetime.utcnow(),
         unit_system=unit_system,
+        temperature_unit=temperature_unit,
         language=language,
         volumes=core_plan.volumes,
         gravity=core_plan.gravity,
