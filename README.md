@@ -57,6 +57,7 @@ Examples:
 - `codex/ba-8`
 - `codex/ba-9`
 - `codex/ba-10`
+- `codex/ba-11`
 
 ## Quick start (PostgreSQL + migrations)
 
@@ -128,10 +129,13 @@ The adapter uses an OpenAI-compatible `POST /v1/chat/completions` interface.
 ## Fermentation endpoints
 
 - `POST /api/v1/batches/{batch_id}/readings`
+- `GET /api/v1/batches/{batch_id}/recipe-snapshot`
 - `GET /api/v1/batches/{batch_id}/readings`
 - `GET /api/v1/batches/{batch_id}/fermentation/trend`
 
 `POST /api/v1/batches/{batch_id}/readings` accepts an optional `recorded_at` timestamp for backfilled readings.
+
+`GET /api/v1/batches/{batch_id}/recipe-snapshot` returns the frozen recipe profile and ingredients captured when the batch was created.
 
 ## Timeline endpoints
 

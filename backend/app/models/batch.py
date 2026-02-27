@@ -28,6 +28,17 @@ class Batch(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
+    recipe_snapshot_captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    recipe_name_snapshot: Mapped[str | None] = mapped_column(String(140), nullable=True)
+    recipe_style_snapshot: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    recipe_target_og_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    recipe_target_fg_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    recipe_target_ibu_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    recipe_target_srm_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    recipe_efficiency_pct_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    recipe_notes_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recipe_ingredients_snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     owner: Mapped[User] = relationship(back_populates="batches")
     readings: Mapped[list[FermentationReading]] = relationship(
         back_populates="batch",
