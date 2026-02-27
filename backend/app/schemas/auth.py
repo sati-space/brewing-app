@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,9 +19,16 @@ class UserRead(BaseModel):
     id: int
     username: str
     email: str
+    preferred_unit_system: Literal["metric", "imperial"]
+    preferred_language: Literal["en", "es"]
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserPreferencesUpdate(BaseModel):
+    preferred_unit_system: Literal["metric", "imperial"] | None = None
+    preferred_language: Literal["en", "es"] | None = None
 
 
 class TokenResponse(BaseModel):

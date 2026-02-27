@@ -25,6 +25,8 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(40), nullable=False, unique=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    preferred_unit_system: Mapped[str] = mapped_column(String(10), default="metric", nullable=False)
+    preferred_language: Mapped[str] = mapped_column(String(5), default="en", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     recipes: Mapped[list[Recipe]] = relationship(back_populates="owner")

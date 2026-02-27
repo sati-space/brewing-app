@@ -226,6 +226,8 @@ def test_auth_register_login_and_me(client: TestClient) -> None:
     register_body = register_response.json()
     assert register_body["token_type"] == "bearer"
     assert register_body["user"]["username"] == "alice"
+    assert register_body["user"]["preferred_unit_system"] == "metric"
+    assert register_body["user"]["preferred_language"] == "en"
 
     login_response = client.post(
         "/api/v1/auth/login",
@@ -244,6 +246,15 @@ def test_auth_register_login_and_me(client: TestClient) -> None:
     assert me_response.status_code == 200
     assert me_response.json()["email"] == "alice@example.com"
 
+    update_preferences = client.patch(
+        "/api/v1/auth/me/preferences",
+        json={"preferred_unit_system": "imperial", "preferred_language": "es"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert update_preferences.status_code == 200
+    assert update_preferences.json()["preferred_unit_system"] == "imperial"
+    assert update_preferences.json()["preferred_language"] == "es"
+
 
 def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/recipes").status_code == 401
@@ -251,6 +262,7 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/notifications/upcoming-steps").status_code == 401
     assert client.get("/api/v1/observability/metrics").status_code == 401
     assert client.get("/api/v1/analytics/overview").status_code == 401
+    assert client.patch("/api/v1/auth/me/preferences").status_code == 401
     assert client.get("/api/v1/imports/recipes/catalog").status_code == 401
     assert client.post("/api/v1/imports/recipes/import").status_code == 401
     assert client.get("/api/v1/styles/bjcp").status_code == 401
@@ -980,6 +992,57 @@ def test_batch_inventory_consume_returns_shortages(client: TestClient) -> None:
     assert detail["shortage_count"] == 3
     assert detail["detail"] == "Insufficient inventory to consume this batch."
     assert len(detail["shortages"]) == 3
+
+
+def test_batch_inventory_preview_and_consume_with_imperial_units(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="consume-imperial", email="consume-imperial@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+    batch_id = _create_batch(client, headers, recipe_id, "Imperial Consume Batch", status="brewing")
+
+    _create_inventory_item(
+        client,
+        headers,
+        name="Pale Malt",
+        ingredient_type="grain",
+        quantity=10.0,
+        unit="lb",
+        low_stock_threshold=2.0,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="Citra",
+        ingredient_type="hop",
+        quantity=2.0,
+        unit="oz",
+        low_stock_threshold=0.3,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="US-05",
+        ingredient_type="yeast",
+        quantity=2.0,
+        unit="pack",
+        low_stock_threshold=1.0,
+    )
+
+    preview_response = client.get(f"/api/v1/batches/{batch_id}/inventory/preview", headers=headers)
+    assert preview_response.status_code == 200
+    preview = preview_response.json()
+    assert preview["can_consume"] is True
+    assert preview["shortage_count"] == 0
+
+    consume_response = client.post(f"/api/v1/batches/{batch_id}/inventory/consume", headers=headers)
+    assert consume_response.status_code == 200
+    assert consume_response.json()["consumed"] is True
+
+    inventory_after = client.get("/api/v1/inventory", headers=headers)
+    assert inventory_after.status_code == 200
+    items_after = {item["name"]: item for item in inventory_after.json()}
+    assert items_after["Pale Malt"]["quantity"] == pytest.approx(0.5201, abs=1e-3)
+    assert items_after["Citra"]["quantity"] == pytest.approx(0.5895, abs=1e-3)
+    assert items_after["US-05"]["quantity"] == 1.0
 
 
 def test_external_recipe_catalog_and_import_flow(client: TestClient) -> None:
@@ -1983,6 +2046,34 @@ def test_brew_plan_without_water_profile(client: TestClient) -> None:
     assert body["water_recommendation"] is None
     assert any("No water profile selected" in note for note in body["notes"])
     assert body["inventory_shortage_count"] == 0
+
+
+def test_brew_plan_respects_user_language_and_unit_preferences(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="brew-pref-user", email="brew-pref-user@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+    batch_id = _create_batch(client, headers, recipe_id, "Pref Batch", status="planned")
+
+    token = headers["Authorization"].replace("Bearer ", "")
+    update_preferences = client.patch(
+        "/api/v1/auth/me/preferences",
+        json={"preferred_unit_system": "imperial", "preferred_language": "es"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert update_preferences.status_code == 200
+
+    brew_plan_response = client.post(
+        f"/api/v1/batches/{batch_id}/brew-plan",
+        json={},
+        headers=headers,
+    )
+    assert brew_plan_response.status_code == 200
+    body = brew_plan_response.json()
+
+    assert body["unit_system"] == "imperial"
+    assert body["language"] == "es"
+    assert body["display_units"]["volume_unit"] == "gal"
+    assert body["display_units"]["temperature_unit"] == "F"
+    assert any("No se selecciono perfil de agua" in note for note in body["notes"])
 
 
 def test_brew_plan_apply_timeline_creates_and_replaces_pending_steps(client: TestClient) -> None:

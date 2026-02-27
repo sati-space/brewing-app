@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from app.models.water_profile import WaterProfile
 from app.services.bjcp_styles import BJCPStyleProfile
+from app.services.preferences import t
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ def build_water_recommendation(
     water_profile: WaterProfile,
     style: BJCPStyleProfile,
     batch_volume_liters: float,
+    language: str = "en",
 ) -> WaterRecommendation:
     source = _profile_snapshot(water_profile)
     target = WaterSnapshot(
@@ -118,15 +120,15 @@ def build_water_recommendation(
         )
 
     if projected["calcium_ppm"] > style.calcium_ppm.max_ppm + 40:
-        notes.append("Projected calcium is well above target range; consider dilution with RO water.")
+        notes.append(t("high_calcium", language))
     if projected["sulfate_ppm"] > style.sulfate_ppm.max_ppm + 50:
-        notes.append("Projected sulfate exceeds target range; reduce gypsum or blend water.")
+        notes.append(t("high_sulfate", language))
     if projected["chloride_ppm"] > style.chloride_ppm.max_ppm + 40:
-        notes.append("Projected chloride exceeds target range; reduce calcium chloride.")
+        notes.append(t("high_chloride", language))
     if source.bicarbonate_ppm > style.bicarbonate_ppm.max_ppm + 50:
-        notes.append("Starting bicarbonate is high for this style; acidification or dilution may be required.")
+        notes.append(t("high_bicarbonate_start", language))
     if not additions:
-        notes.append("Base water is already close to target profile; only minor adjustments may be needed.")
+        notes.append(t("water_close", language))
 
     projected_snapshot = WaterSnapshot(
         calcium_ppm=round(projected["calcium_ppm"], 2),
