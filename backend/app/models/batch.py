@@ -39,6 +39,8 @@ class Batch(Base):
     recipe_notes_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
     recipe_ingredients_snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    inventory_consumed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     owner: Mapped[User] = relationship(back_populates="batches")
     readings: Mapped[list[FermentationReading]] = relationship(
         back_populates="batch",

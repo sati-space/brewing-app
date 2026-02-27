@@ -242,6 +242,8 @@ def test_protected_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/observability/metrics").status_code == 401
     assert client.get("/api/v1/analytics/overview").status_code == 401
     assert client.get("/api/v1/batches/1/recipe-snapshot").status_code == 401
+    assert client.get("/api/v1/batches/1/inventory/preview").status_code == 401
+    assert client.post("/api/v1/batches/1/inventory/consume").status_code == 401
     assert client.get("/api/v1/batches/1/fermentation/trend").status_code == 401
 
     create_response = client.post(
@@ -546,6 +548,8 @@ def test_user_scope_isolation(client: TestClient) -> None:
     assert same_name_for_b.status_code == 201
 
     assert client.get(f"/api/v1/batches/{batch_id}/recipe-snapshot", headers=headers_b).status_code == 404
+    assert client.get(f"/api/v1/batches/{batch_id}/inventory/preview", headers=headers_b).status_code == 404
+    assert client.post(f"/api/v1/batches/{batch_id}/inventory/consume", headers=headers_b).status_code == 404
     assert client.get(f"/api/v1/batches/{batch_id}/readings", headers=headers_b).status_code == 404
     assert client.get(f"/api/v1/batches/{batch_id}/fermentation/trend", headers=headers_b).status_code == 404
     assert client.get(f"/api/v1/batches/{batch_id}/timeline/steps", headers=headers_b).status_code == 404
@@ -588,6 +592,8 @@ def test_not_found_cases(client: TestClient) -> None:
 
     assert client.get("/api/v1/inventory/9999", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/recipe-snapshot", headers=headers).status_code == 404
+    assert client.get("/api/v1/batches/9999/inventory/preview", headers=headers).status_code == 404
+    assert client.post("/api/v1/batches/9999/inventory/consume", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/readings", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/fermentation/trend", headers=headers).status_code == 404
     assert client.get("/api/v1/batches/9999/timeline/steps", headers=headers).status_code == 404
@@ -818,3 +824,101 @@ def test_batch_recipe_snapshot_returns_frozen_recipe_data(client: TestClient) ->
 
     ingredient_names = [ingredient["name"] for ingredient in body["ingredients"]]
     assert ingredient_names == ["Pale Malt", "Citra", "US-05"]
+
+
+def test_batch_inventory_preview_and_consume_flow(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="consume-user", email="consume-user@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+    batch_id = _create_batch(client, headers, recipe_id, "Consume Batch", status="brewing")
+
+    _create_inventory_item(
+        client,
+        headers,
+        name="Pale Malt",
+        ingredient_type="grain",
+        quantity=5000,
+        unit="g",
+        low_stock_threshold=1000,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="Citra",
+        ingredient_type="hop",
+        quantity=0.1,
+        unit="kg",
+        low_stock_threshold=0.02,
+    )
+    _create_inventory_item(
+        client,
+        headers,
+        name="US-05",
+        ingredient_type="yeast",
+        quantity=2,
+        unit="pack",
+        low_stock_threshold=1,
+    )
+
+    preview_response = client.get(f"/api/v1/batches/{batch_id}/inventory/preview", headers=headers)
+    assert preview_response.status_code == 200
+    preview = preview_response.json()
+    assert preview["can_consume"] is True
+    assert preview["shortage_count"] == 0
+    assert len(preview["requirements"]) == 3
+
+    preview_by_name = {row["name"]: row for row in preview["requirements"]}
+    assert preview_by_name["Pale Malt"]["available_amount"] == 5.0
+    assert preview_by_name["Citra"]["available_amount"] == 100.0
+    assert preview_by_name["US-05"]["available_amount"] == 2.0
+
+    consume_response = client.post(f"/api/v1/batches/{batch_id}/inventory/consume", headers=headers)
+    assert consume_response.status_code == 200
+    consume = consume_response.json()
+    assert consume["consumed"] is True
+    assert consume["shortage_count"] == 0
+    assert consume["consumed_at"] is not None
+    assert len(consume["items"]) == 3
+
+    inventory_after = client.get("/api/v1/inventory", headers=headers)
+    assert inventory_after.status_code == 200
+    items_after = {item["name"]: item for item in inventory_after.json()}
+    assert items_after["Pale Malt"]["quantity"] == 700.0
+    assert items_after["Citra"]["quantity"] == pytest.approx(0.06, abs=1e-6)
+    assert items_after["US-05"]["quantity"] == 1.0
+
+    second_consume = client.post(f"/api/v1/batches/{batch_id}/inventory/consume", headers=headers)
+    assert second_consume.status_code == 409
+    second_body = second_consume.json()["detail"]
+    assert second_body["consumed"] is False
+    assert second_body["detail"] == "Inventory already consumed for this batch."
+
+
+
+def test_batch_inventory_consume_returns_shortages(client: TestClient) -> None:
+    headers = _register_and_get_headers(client, username="shortage-user", email="shortage-user@example.com")
+    recipe_id = _create_recipe(client, headers=headers)
+    batch_id = _create_batch(client, headers, recipe_id, "Shortage Batch", status="brewing")
+
+    _create_inventory_item(
+        client,
+        headers,
+        name="Citra",
+        ingredient_type="hop",
+        quantity=20,
+        unit="g",
+        low_stock_threshold=10,
+    )
+
+    preview_response = client.get(f"/api/v1/batches/{batch_id}/inventory/preview", headers=headers)
+    assert preview_response.status_code == 200
+    preview = preview_response.json()
+    assert preview["can_consume"] is False
+    assert preview["shortage_count"] == 3
+
+    consume_response = client.post(f"/api/v1/batches/{batch_id}/inventory/consume", headers=headers)
+    assert consume_response.status_code == 409
+    detail = consume_response.json()["detail"]
+    assert detail["consumed"] is False
+    assert detail["shortage_count"] == 3
+    assert detail["detail"] == "Insufficient inventory to consume this batch."
+    assert len(detail["shortages"]) == 3

@@ -90,3 +90,41 @@ class BatchRecipeSnapshotRead(BaseModel):
     efficiency_pct: float | None
     notes: str | None
     ingredients: list[RecipeIngredientSnapshotRead] = Field(default_factory=list)
+
+
+class BatchInventoryRequirementRead(BaseModel):
+    name: str
+    ingredient_type: str
+    required_amount: float
+    required_unit: str
+    available_amount: float
+    shortage_amount: float
+    enough_stock: bool
+    inventory_item_id: int | None
+    inventory_unit: str | None
+
+
+class BatchInventoryPreviewRead(BaseModel):
+    batch_id: int
+    can_consume: bool
+    shortage_count: int
+    requirements: list[BatchInventoryRequirementRead] = Field(default_factory=list)
+
+
+class BatchInventoryConsumeItemRead(BaseModel):
+    inventory_item_id: int
+    name: str
+    consumed_amount: float
+    consumed_unit: str
+    quantity_before: float
+    quantity_after: float
+
+
+class BatchInventoryConsumeRead(BaseModel):
+    batch_id: int
+    consumed: bool
+    consumed_at: datetime | None
+    shortage_count: int
+    items: list[BatchInventoryConsumeItemRead] = Field(default_factory=list)
+    shortages: list[BatchInventoryRequirementRead] = Field(default_factory=list)
+    detail: str
