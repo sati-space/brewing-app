@@ -1,13 +1,15 @@
 import type { Translator } from "../i18n";
 import type { BrewPlan } from "../types";
 import { DataRow } from "./DataRow";
+import { EmptyBrewPlanState } from "./EmptyBrewPlanState";
 
 interface BrewSummaryPanelProps {
   tr: Translator;
   brewPlan: BrewPlan | null;
+  onJumpToDataManager: () => void;
 }
 
-export function BrewSummaryPanel({ tr, brewPlan }: BrewSummaryPanelProps) {
+export function BrewSummaryPanel({ tr, brewPlan, onJumpToDataManager }: BrewSummaryPanelProps) {
   return (
     <section className="panel span-two">
       <h2>{tr("summary")}</h2>
@@ -44,7 +46,7 @@ export function BrewSummaryPanel({ tr, brewPlan }: BrewSummaryPanelProps) {
           />
         </div>
       ) : (
-        <p>{tr("not_loaded")}</p>
+        <EmptyBrewPlanState tr={tr} onJumpToDataManager={onJumpToDataManager} />
       )}
     </section>
   );

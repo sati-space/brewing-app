@@ -232,6 +232,14 @@ select:focus {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.planner-override-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.override-label-full {
+  grid-column: 1 / -1;
+}
+
 .button-row {
   display: flex;
   flex-wrap: wrap;
@@ -243,6 +251,15 @@ select:focus {
   margin-top: 0.7rem;
   font-size: 0.92rem;
   color: var(--muted);
+}
+
+.inline-note.with-action {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
 }
 
 .summary-grid {
@@ -324,8 +341,47 @@ select:focus {
   padding: 0.35rem 0.8rem;
 }
 
+.empty-state {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.empty-state .ghost-button {
+  justify-self: start;
+}
+
+.onboarding-panel {
+  background:
+    linear-gradient(120deg, rgba(47, 94, 62, 0.1), rgba(255, 255, 255, 0.5)),
+    var(--panel);
+}
+
+.onboarding-list {
+  margin: 0.55rem 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.3rem;
+  color: var(--muted);
+}
+
+.ghost-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.58rem 1.05rem;
+  font-weight: 700;
+  background: rgba(47, 94, 62, 0.12);
+  color: var(--accent);
+  text-decoration: none;
+}
+
 .span-two {
   grid-column: span 2;
+}
+
+.span-full {
+  grid-column: 1 / -1;
 }
 
 @keyframes panel-in {
@@ -345,6 +401,10 @@ select:focus {
   }
 
   .override-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .planner-override-grid {
     grid-template-columns: 1fr;
   }
 

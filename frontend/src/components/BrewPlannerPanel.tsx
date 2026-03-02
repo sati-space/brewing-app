@@ -22,6 +22,7 @@ interface BrewPlannerPanelProps {
   overrideTemperatureUnit: "" | TemperatureUnit;
   overrideLanguage: "" | Language;
   applyResult: BrewPlanApplyResult | null;
+  hasMinimumSetup: boolean;
   onSelectedBatchChange: (value: number | null) => void;
   onSelectedEquipmentChange: (value: number | null) => void;
   onSelectedWaterProfileChange: (value: number | null) => void;
@@ -30,6 +31,7 @@ interface BrewPlannerPanelProps {
   onOverrideLanguageChange: (value: "" | Language) => void;
   onGeneratePlan: () => Promise<void>;
   onApplyTimeline: () => Promise<void>;
+  onJumpToDataManager: () => void;
 }
 
 export function BrewPlannerPanel({
@@ -45,6 +47,7 @@ export function BrewPlannerPanel({
   overrideTemperatureUnit,
   overrideLanguage,
   applyResult,
+  hasMinimumSetup,
   onSelectedBatchChange,
   onSelectedEquipmentChange,
   onSelectedWaterProfileChange,
@@ -53,9 +56,10 @@ export function BrewPlannerPanel({
   onOverrideLanguageChange,
   onGeneratePlan,
   onApplyTimeline,
+  onJumpToDataManager,
 }: BrewPlannerPanelProps) {
   return (
-    <section className="panel">
+    <section className="panel planner-panel">
       <h2>{tr("dashboard")}</h2>
       <div className="stack-form">
         <label>
@@ -105,7 +109,7 @@ export function BrewPlannerPanel({
       </div>
 
       <h3>{tr("overrides")}</h3>
-      <div className="override-grid">
+      <div className="override-grid planner-override-grid">
         <label>
           {tr("unit_system")}
           <select
@@ -130,7 +134,7 @@ export function BrewPlannerPanel({
           </select>
         </label>
 
-        <label>
+        <label className="override-label-full">
           {tr("language")}
           <select
             value={overrideLanguage}
@@ -151,6 +155,15 @@ export function BrewPlannerPanel({
           {tr("apply_timeline")}
         </button>
       </div>
+
+      {!hasMinimumSetup ? (
+        <div className="inline-note with-action">
+          <span>{tr("empty_plan_hint")}</span>
+          <button className="ghost-button" type="button" onClick={onJumpToDataManager}>
+            {tr("jump_data_manager")}
+          </button>
+        </div>
+      ) : null}
 
       {applyResult ? (
         <p className="inline-note">

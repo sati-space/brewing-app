@@ -75,7 +75,15 @@ export type TranslationKey =
   | "trub_loss"
   | "brewhouse_efficiency"
   | "list_empty"
-  | "remove";
+  | "remove"
+  | "jump_data_manager"
+  | "empty_plan_hint"
+  | "getting_started_title"
+  | "getting_started_intro"
+  | "getting_started_step_1"
+  | "getting_started_step_2"
+  | "getting_started_step_3"
+  | "open_api_docs";
 
 export type Translator = (key: TranslationKey) => string;
 
@@ -156,6 +164,14 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     brewhouse_efficiency: "Brewhouse Efficiency %",
     list_empty: "No records yet.",
     remove: "Remove",
+    jump_data_manager: "Go To Data Manager",
+    empty_plan_hint: "Create recipes and equipment first, then generate your first brew plan.",
+    getting_started_title: "Get Started",
+    getting_started_intro: "Set up your brew workspace in three quick steps.",
+    getting_started_step_1: "Create one recipe and one equipment profile in Data Manager.",
+    getting_started_step_2: "Create a batch for your recipe using API Docs.",
+    getting_started_step_3: "Return here, select your batch, and generate a brew plan.",
+    open_api_docs: "Open API Docs",
   },
   es: {
     app_title: "BrewPilot",
@@ -233,6 +249,14 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     brewhouse_efficiency: "Eficiencia de sala %",
     list_empty: "Sin registros aun.",
     remove: "Quitar",
+    jump_data_manager: "Ir al gestor de datos",
+    empty_plan_hint: "Crea recetas y equipos primero, luego genera tu primer brew plan.",
+    getting_started_title: "Primeros pasos",
+    getting_started_intro: "Configura tu espacio de brew en tres pasos.",
+    getting_started_step_1: "Crea una receta y un perfil de equipo en el gestor de datos.",
+    getting_started_step_2: "Crea un lote para tu receta usando la documentacion del API.",
+    getting_started_step_3: "Vuelve aqui, selecciona el lote y genera un brew plan.",
+    open_api_docs: "Abrir API Docs",
   },
 };
 

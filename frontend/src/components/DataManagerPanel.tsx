@@ -23,6 +23,7 @@ interface DataManagerPanelProps {
   onCreateEquipment: (payload: EquipmentProfileCreate) => Promise<boolean>;
   onCreateRecipe: (payload: RecipeCreate) => Promise<boolean>;
   onClientError: (message: string) => void;
+  panelId?: string;
 }
 
 export function DataManagerPanel({
@@ -36,6 +37,7 @@ export function DataManagerPanel({
   onCreateEquipment,
   onCreateRecipe,
   onClientError,
+  panelId,
 }: DataManagerPanelProps) {
   const [activeTab, setActiveTab] = useState<DataTab>("recipes");
 
@@ -180,7 +182,7 @@ export function DataManagerPanel({
   }
 
   return (
-    <section className="panel span-two">
+    <section className="panel span-two" id={panelId}>
       <h2>{tr("data_manager")}</h2>
 
       <div className="tab-row manager-tabs">

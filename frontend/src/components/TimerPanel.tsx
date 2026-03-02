@@ -1,5 +1,6 @@
 import type { Translator } from "../i18n";
 import type { BrewPlan } from "../types";
+import { EmptyBrewPlanState } from "./EmptyBrewPlanState";
 
 export interface TimerState {
   stepIndex: number;
@@ -14,9 +15,18 @@ interface TimerPanelProps {
   onStartPause: () => void;
   onNextStep: () => void;
   onReset: () => void;
+  onJumpToDataManager: () => void;
 }
 
-export function TimerPanel({ tr, brewPlan, timer, onStartPause, onNextStep, onReset }: TimerPanelProps) {
+export function TimerPanel({
+  tr,
+  brewPlan,
+  timer,
+  onStartPause,
+  onNextStep,
+  onReset,
+  onJumpToDataManager,
+}: TimerPanelProps) {
   const activeStep = brewPlan?.timer_plan[timer.stepIndex] ?? null;
 
   return (
@@ -41,7 +51,7 @@ export function TimerPanel({ tr, brewPlan, timer, onStartPause, onNextStep, onRe
           </div>
         </>
       ) : (
-        <p>{tr("not_loaded")}</p>
+        <EmptyBrewPlanState tr={tr} onJumpToDataManager={onJumpToDataManager} />
       )}
     </section>
   );
