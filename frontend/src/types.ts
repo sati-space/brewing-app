@@ -34,11 +34,88 @@ export interface Batch {
 export interface EquipmentProfile {
   id: number;
   name: string;
+  batch_volume_liters?: number;
+  mash_tun_volume_liters?: number | null;
+  boil_kettle_volume_liters?: number | null;
+  brewhouse_efficiency_pct?: number;
+  boil_off_rate_l_per_hour?: number | null;
+  trub_loss_liters?: number | null;
+  notes?: string;
+  source_provider?: string;
+  source_external_id?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface WaterProfile {
   id: number;
   name: string;
+}
+
+export interface IngredientProfile {
+  id: number;
+  name: string;
+  ingredient_type: string;
+  default_unit: string;
+  notes: string;
+  source_provider?: string | null;
+  source_external_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface IngredientProfileCreate {
+  name: string;
+  ingredient_type: string;
+  default_unit: string;
+  notes: string;
+}
+
+export interface EquipmentProfileCreate {
+  name: string;
+  batch_volume_liters: number;
+  mash_tun_volume_liters: number | null;
+  boil_kettle_volume_liters: number | null;
+  brewhouse_efficiency_pct: number;
+  boil_off_rate_l_per_hour: number | null;
+  trub_loss_liters: number | null;
+  notes: string;
+}
+
+export interface RecipeIngredient {
+  id?: number;
+  name: string;
+  ingredient_type: string;
+  amount: number;
+  unit: string;
+  stage: string;
+  minute_added: number;
+}
+
+export interface Recipe {
+  id: number;
+  name: string;
+  style: string;
+  target_og: number;
+  target_fg: number;
+  target_ibu: number;
+  target_srm: number;
+  efficiency_pct: number;
+  notes: string;
+  created_at?: string;
+  ingredients: RecipeIngredient[];
+}
+
+export interface RecipeCreate {
+  name: string;
+  style: string;
+  target_og: number;
+  target_fg: number;
+  target_ibu: number;
+  target_srm: number;
+  efficiency_pct: number;
+  notes: string;
+  ingredients: RecipeIngredient[];
 }
 
 export interface BrewPlanStep {
