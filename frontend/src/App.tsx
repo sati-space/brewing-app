@@ -6,6 +6,7 @@ import { BrewPlannerPanel } from "./components/BrewPlannerPanel";
 import { BrewSummaryPanel } from "./components/BrewSummaryPanel";
 import { DataManagerPanel } from "./components/DataManagerPanel";
 import { NotesPanel } from "./components/NotesPanel";
+import { OnboardingPanel } from "./components/OnboardingPanel";
 import { PreferencesPanel } from "./components/PreferencesPanel";
 import { ShoppingListPanel } from "./components/ShoppingListPanel";
 import { TimerPanel, type TimerState } from "./components/TimerPanel";
@@ -30,6 +31,7 @@ import type {
 
 const TOKEN_STORAGE_KEY = "brewpilot.token";
 const USER_STORAGE_KEY = "brewpilot.user";
+const DATA_MANAGER_SECTION_ID = "data-manager-panel";
 
 function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY));
@@ -63,6 +65,7 @@ function App() {
 
   const uiLanguage: Language = overrideLanguage || user?.preferred_language || "en";
   const tr = (key: TranslationKey): string => translate(uiLanguage, key);
+  const hasMinimumSetup = recipes.length > 0 && equipmentProfiles.length > 0 && batches.length > 0;
 
   useEffect(() => {
     if (!token) {
@@ -444,6 +447,13 @@ function App() {
     });
   }
 
+  function onJumpToDataManager(): void {
+    const panel = document.getElementById(DATA_MANAGER_SECTION_ID);
+    if (panel) {
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="hero">
@@ -467,6 +477,8 @@ function App() {
         <AuthPanel loading={loading} tr={tr} onAuthenticate={onAuthenticate} />
       ) : (
         <section className="dashboard-grid">
+          {!hasMinimumSetup ? <OnboardingPanel tr={tr} onJumpToDataManager={onJumpToDataManager} /> : null}
+
           <PreferencesPanel
             loading={loading}
             tr={tr}
@@ -492,6 +504,7 @@ function App() {
             overrideTemperatureUnit={overrideTemperatureUnit}
             overrideLanguage={overrideLanguage}
             applyResult={applyResult}
+            hasMinimumSetup={hasMinimumSetup}
             onSelectedBatchChange={setSelectedBatchId}
             onSelectedEquipmentChange={setSelectedEquipmentId}
             onSelectedWaterProfileChange={setSelectedWaterProfileId}
@@ -500,9 +513,10 @@ function App() {
             onOverrideLanguageChange={setOverrideLanguage}
             onGeneratePlan={onGenerateBrewPlan}
             onApplyTimeline={onApplyTimeline}
+            onJumpToDataManager={onJumpToDataManager}
           />
 
-          <BrewSummaryPanel tr={tr} brewPlan={brewPlan} />
+          <BrewSummaryPanel tr={tr} brewPlan={brewPlan} onJumpToDataManager={onJumpToDataManager} />
 
           <TimerPanel
             tr={tr}
@@ -511,10 +525,11 @@ function App() {
             onStartPause={onStartPause}
             onNextStep={onNextStep}
             onReset={onResetTimer}
+            onJumpToDataManager={onJumpToDataManager}
           />
 
-          <ShoppingListPanel tr={tr} brewPlan={brewPlan} />
-          <NotesPanel tr={tr} brewPlan={brewPlan} />
+          <ShoppingListPanel tr={tr} brewPlan={brewPlan} onJumpToDataManager={onJumpToDataManager} />
+          <NotesPanel tr={tr} brewPlan={brewPlan} onJumpToDataManager={onJumpToDataManager} />
 
           <DataManagerPanel
             loading={loading}
@@ -530,6 +545,7 @@ function App() {
               setSuccess(null);
               setError(message);
             }}
+            panelId={DATA_MANAGER_SECTION_ID}
           />
         </section>
       )}
