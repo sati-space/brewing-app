@@ -288,6 +288,42 @@ select:focus {
   background: rgba(61, 76, 48, 0.08);
 }
 
+.manager-tabs {
+  margin-bottom: 0.2rem;
+}
+
+.manager-grid {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inline-grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-list {
+  margin-top: 0.7rem;
+}
+
+.compact-list li {
+  font-size: 0.92rem;
+}
+
+.list-with-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.list-with-action .ghost-button {
+  padding: 0.35rem 0.8rem;
+}
+
 .span-two {
   grid-column: span 2;
 }
@@ -309,6 +345,11 @@ select:focus {
   }
 
   .override-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-grid,
+  .inline-grid {
     grid-template-columns: 1fr;
   }
 

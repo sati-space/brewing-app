@@ -5,8 +5,13 @@ import type {
   Batch,
   BrewPlan,
   BrewPlanApplyResult,
+  EquipmentProfileCreate,
   EquipmentProfile,
+  IngredientProfile,
+  IngredientProfileCreate,
   Language,
+  Recipe,
+  RecipeCreate,
   TemperatureUnit,
   TokenResponse,
   UnitSystem,
@@ -60,7 +65,39 @@ type TranslationKey =
   | "of"
   | "missing"
   | "api_base"
-  | "not_loaded";
+  | "not_loaded"
+  | "data_manager"
+  | "recipes"
+  | "ingredients"
+  | "equipment"
+  | "refresh"
+  | "create"
+  | "new_recipe"
+  | "recipe_name"
+  | "style"
+  | "target_og"
+  | "target_fg"
+  | "target_ibu"
+  | "target_srm"
+  | "efficiency"
+  | "ingredient_name"
+  | "ingredient_type"
+  | "amount"
+  | "unit"
+  | "stage"
+  | "minute_added"
+  | "add_ingredient"
+  | "new_ingredient"
+  | "default_unit"
+  | "new_equipment"
+  | "batch_volume"
+  | "mash_tun_volume"
+  | "boil_kettle_volume"
+  | "boil_off_rate"
+  | "trub_loss"
+  | "brewhouse_efficiency"
+  | "list_empty"
+  | "remove";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   en: {
@@ -107,6 +144,38 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     missing: "Missing",
     api_base: "API base",
     not_loaded: "No brew plan loaded yet.",
+    data_manager: "Data Manager",
+    recipes: "Recipes",
+    ingredients: "Ingredients",
+    equipment: "Equipment",
+    refresh: "Refresh",
+    create: "Create",
+    new_recipe: "New Recipe",
+    recipe_name: "Recipe Name",
+    style: "Style",
+    target_og: "Target OG",
+    target_fg: "Target FG",
+    target_ibu: "Target IBU",
+    target_srm: "Target SRM",
+    efficiency: "Efficiency %",
+    ingredient_name: "Ingredient Name",
+    ingredient_type: "Ingredient Type",
+    amount: "Amount",
+    unit: "Unit",
+    stage: "Stage",
+    minute_added: "Minute Added",
+    add_ingredient: "Add Ingredient",
+    new_ingredient: "New Ingredient",
+    default_unit: "Default Unit",
+    new_equipment: "New Equipment",
+    batch_volume: "Batch Volume (L)",
+    mash_tun_volume: "Mash Tun Volume (L)",
+    boil_kettle_volume: "Boil Kettle Volume (L)",
+    boil_off_rate: "Boil Off Rate (L/hr)",
+    trub_loss: "Trub Loss (L)",
+    brewhouse_efficiency: "Brewhouse Efficiency %",
+    list_empty: "No records yet.",
+    remove: "Remove",
   },
   es: {
     app_title: "BrewPilot",
@@ -152,6 +221,38 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     missing: "Faltante",
     api_base: "Base API",
     not_loaded: "No hay brew plan cargado.",
+    data_manager: "Gestor de datos",
+    recipes: "Recetas",
+    ingredients: "Ingredientes",
+    equipment: "Equipos",
+    refresh: "Actualizar",
+    create: "Crear",
+    new_recipe: "Nueva receta",
+    recipe_name: "Nombre de receta",
+    style: "Estilo",
+    target_og: "OG objetivo",
+    target_fg: "FG objetivo",
+    target_ibu: "IBU objetivo",
+    target_srm: "SRM objetivo",
+    efficiency: "Eficiencia %",
+    ingredient_name: "Nombre del ingrediente",
+    ingredient_type: "Tipo de ingrediente",
+    amount: "Cantidad",
+    unit: "Unidad",
+    stage: "Etapa",
+    minute_added: "Minuto agregado",
+    add_ingredient: "Agregar ingrediente",
+    new_ingredient: "Nuevo ingrediente",
+    default_unit: "Unidad por defecto",
+    new_equipment: "Nuevo equipo",
+    batch_volume: "Volumen del lote (L)",
+    mash_tun_volume: "Volumen de macerador (L)",
+    boil_kettle_volume: "Volumen de olla (L)",
+    boil_off_rate: "Evaporacion (L/h)",
+    trub_loss: "Perdida de turbio (L)",
+    brewhouse_efficiency: "Eficiencia de sala %",
+    list_empty: "Sin registros aun.",
+    remove: "Quitar",
   },
 };
 
@@ -160,6 +261,8 @@ interface TimerState {
   running: boolean;
   remainingSeconds: number;
 }
+
+type DataTab = "recipes" | "ingredients" | "equipment";
 
 function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY));
@@ -177,6 +280,9 @@ function App() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [equipmentProfiles, setEquipmentProfiles] = useState<EquipmentProfile[]>([]);
   const [waterProfiles, setWaterProfiles] = useState<WaterProfile[]>([]);
+  const [ingredientProfiles, setIngredientProfiles] = useState<IngredientProfile[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [activeDataTab, setActiveDataTab] = useState<DataTab>("recipes");
 
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
@@ -193,6 +299,36 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const [ingredientName, setIngredientName] = useState("");
+  const [ingredientType, setIngredientType] = useState("grain");
+  const [ingredientUnit, setIngredientUnit] = useState("g");
+  const [ingredientNotes, setIngredientNotes] = useState("");
+
+  const [equipmentName, setEquipmentName] = useState("");
+  const [equipmentBatchVolume, setEquipmentBatchVolume] = useState("20");
+  const [equipmentMashTunVolume, setEquipmentMashTunVolume] = useState("");
+  const [equipmentBoilKettleVolume, setEquipmentBoilKettleVolume] = useState("");
+  const [equipmentEfficiency, setEquipmentEfficiency] = useState("72");
+  const [equipmentBoilOffRate, setEquipmentBoilOffRate] = useState("");
+  const [equipmentTrubLoss, setEquipmentTrubLoss] = useState("");
+  const [equipmentNotes, setEquipmentNotes] = useState("");
+
+  const [recipeName, setRecipeName] = useState("");
+  const [recipeStyle, setRecipeStyle] = useState("21A");
+  const [recipeOg, setRecipeOg] = useState("1.060");
+  const [recipeFg, setRecipeFg] = useState("1.012");
+  const [recipeIbu, setRecipeIbu] = useState("60");
+  const [recipeSrm, setRecipeSrm] = useState("10");
+  const [recipeEfficiency, setRecipeEfficiency] = useState("72");
+  const [recipeNotes, setRecipeNotes] = useState("");
+  const [recipeIngredientName, setRecipeIngredientName] = useState("");
+  const [recipeIngredientType, setRecipeIngredientType] = useState("grain");
+  const [recipeIngredientAmount, setRecipeIngredientAmount] = useState("1");
+  const [recipeIngredientUnit, setRecipeIngredientUnit] = useState("kg");
+  const [recipeIngredientStage, setRecipeIngredientStage] = useState("mash");
+  const [recipeIngredientMinute, setRecipeIngredientMinute] = useState("0");
+  const [recipeIngredientsDraft, setRecipeIngredientsDraft] = useState<RecipeCreate["ingredients"]>([]);
 
   const uiLanguage: Language = overrideLanguage || user?.preferred_language || "en";
   const tr = (key: TranslationKey): string => translations[uiLanguage][key];
@@ -239,18 +375,20 @@ function App() {
     setPrefLanguage(user.preferred_language);
   }, [user]);
 
-  async function loadDashboard(): Promise<void> {
+  async function loadDashboard(): Promise<boolean> {
     if (!token) {
-      return;
+      return false;
     }
     setLoading(true);
     setError(null);
     try {
-      const [freshUser, batchList, equipmentList, waterList] = await Promise.all([
+      const [freshUser, batchList, equipmentList, waterList, ingredientList, recipeList] = await Promise.all([
         apiRequest<User>("/auth/me", {}, token),
         apiRequest<Batch[]>("/batches", {}, token),
         apiRequest<EquipmentProfile[]>("/equipment", {}, token),
         apiRequest<WaterProfile[]>("/water-profiles", {}, token),
+        apiRequest<IngredientProfile[]>("/ingredients", {}, token),
+        apiRequest<Recipe[]>("/recipes", {}, token),
       ]);
 
       setUser(freshUser);
@@ -258,12 +396,16 @@ function App() {
       setBatches(batchList);
       setEquipmentProfiles(equipmentList);
       setWaterProfiles(waterList);
+      setIngredientProfiles(ingredientList);
+      setRecipes(recipeList);
 
       if (batchList.length > 0 && selectedBatchId === null) {
         setSelectedBatchId(batchList[0].id);
       }
+      return true;
     } catch (err) {
       setError(toMessage(err));
+      return false;
     } finally {
       setLoading(false);
     }
@@ -310,6 +452,11 @@ function App() {
   function onLogout(): void {
     setToken(null);
     setUser(null);
+    setBatches([]);
+    setEquipmentProfiles([]);
+    setWaterProfiles([]);
+    setIngredientProfiles([]);
+    setRecipes([]);
     setBrewPlan(null);
     setApplyResult(null);
     setTimer({ stepIndex: 0, running: false, remainingSeconds: 0 });
@@ -341,6 +488,174 @@ function App() {
       setUser(updated);
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
       setSuccess("Preferences saved.");
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onRefreshDataManager(): Promise<void> {
+    setSuccess(null);
+    const loaded = await loadDashboard();
+    if (loaded) {
+      setSuccess("Data refreshed.");
+    }
+  }
+
+  async function onCreateIngredient(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!token) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const payload: IngredientProfileCreate = {
+        name: ingredientName.trim(),
+        ingredient_type: ingredientType.trim(),
+        default_unit: ingredientUnit.trim(),
+        notes: ingredientNotes.trim(),
+      };
+      const created = await apiRequest<IngredientProfile>(
+        "/ingredients",
+        { method: "POST", body: JSON.stringify(payload) },
+        token,
+      );
+      setIngredientProfiles((previous) => [...previous, created]);
+      setIngredientName("");
+      setIngredientNotes("");
+      setSuccess("Ingredient created.");
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onCreateEquipment(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!token) {
+      return;
+    }
+    const batchVolume = Number(equipmentBatchVolume);
+    const efficiency = Number(equipmentEfficiency);
+    if (!Number.isFinite(batchVolume) || batchVolume <= 0 || !Number.isFinite(efficiency) || efficiency <= 0) {
+      setError("Equipment volume and efficiency must be valid positive numbers.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const payload: EquipmentProfileCreate = {
+        name: equipmentName.trim(),
+        batch_volume_liters: batchVolume,
+        mash_tun_volume_liters: parseOptionalNumber(equipmentMashTunVolume),
+        boil_kettle_volume_liters: parseOptionalNumber(equipmentBoilKettleVolume),
+        brewhouse_efficiency_pct: efficiency,
+        boil_off_rate_l_per_hour: parseOptionalNumber(equipmentBoilOffRate),
+        trub_loss_liters: parseOptionalNumber(equipmentTrubLoss),
+        notes: equipmentNotes.trim(),
+      };
+      const created = await apiRequest<EquipmentProfile>(
+        "/equipment",
+        { method: "POST", body: JSON.stringify(payload) },
+        token,
+      );
+      setEquipmentProfiles((previous) => [created, ...previous]);
+      setSelectedEquipmentId(created.id);
+      setEquipmentName("");
+      setEquipmentBatchVolume("20");
+      setEquipmentMashTunVolume("");
+      setEquipmentBoilKettleVolume("");
+      setEquipmentEfficiency("72");
+      setEquipmentBoilOffRate("");
+      setEquipmentTrubLoss("");
+      setEquipmentNotes("");
+      setSuccess("Equipment profile created.");
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function onAddRecipeIngredient(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const amount = Number(recipeIngredientAmount);
+    const minuteAdded = Number(recipeIngredientMinute);
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(minuteAdded) || minuteAdded < 0) {
+      setError("Ingredient amount/minute must be valid numbers.");
+      return;
+    }
+
+    setError(null);
+    setRecipeIngredientsDraft((previous) => [
+      ...previous,
+      {
+        name: recipeIngredientName.trim(),
+        ingredient_type: recipeIngredientType.trim(),
+        amount,
+        unit: recipeIngredientUnit.trim(),
+        stage: recipeIngredientStage.trim(),
+        minute_added: minuteAdded,
+      },
+    ]);
+    setRecipeIngredientName("");
+    setRecipeIngredientAmount("1");
+    setRecipeIngredientMinute("0");
+  }
+
+  function onRemoveRecipeIngredient(index: number): void {
+    setRecipeIngredientsDraft((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  async function onCreateRecipe(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!token) {
+      return;
+    }
+    if (!recipeIngredientsDraft.length) {
+      setError("Add at least one ingredient before creating a recipe.");
+      return;
+    }
+
+    const payload: RecipeCreate = {
+      name: recipeName.trim(),
+      style: recipeStyle.trim(),
+      target_og: Number(recipeOg),
+      target_fg: Number(recipeFg),
+      target_ibu: Number(recipeIbu),
+      target_srm: Number(recipeSrm),
+      efficiency_pct: Number(recipeEfficiency),
+      notes: recipeNotes.trim(),
+      ingredients: recipeIngredientsDraft,
+    };
+
+    if (
+      !Number.isFinite(payload.target_og) ||
+      !Number.isFinite(payload.target_fg) ||
+      !Number.isFinite(payload.target_ibu) ||
+      !Number.isFinite(payload.target_srm) ||
+      !Number.isFinite(payload.efficiency_pct)
+    ) {
+      setError("Recipe numeric fields must be valid numbers.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const created = await apiRequest<Recipe>("/recipes", { method: "POST", body: JSON.stringify(payload) }, token);
+      setRecipes((previous) => [created, ...previous]);
+      setRecipeName("");
+      setRecipeNotes("");
+      setRecipeIngredientsDraft([]);
+      setSuccess("Recipe created.");
     } catch (err) {
       setError(toMessage(err));
     } finally {
@@ -739,6 +1054,371 @@ function App() {
               <p>-</p>
             )}
           </section>
+
+          <section className="panel span-two">
+            <h2>{tr("data_manager")}</h2>
+            <div className="tab-row manager-tabs">
+              <button
+                className={activeDataTab === "recipes" ? "tab active" : "tab"}
+                onClick={() => setActiveDataTab("recipes")}
+              >
+                {tr("recipes")}
+              </button>
+              <button
+                className={activeDataTab === "ingredients" ? "tab active" : "tab"}
+                onClick={() => setActiveDataTab("ingredients")}
+              >
+                {tr("ingredients")}
+              </button>
+              <button
+                className={activeDataTab === "equipment" ? "tab active" : "tab"}
+                onClick={() => setActiveDataTab("equipment")}
+              >
+                {tr("equipment")}
+              </button>
+            </div>
+            <div className="button-row">
+              <button className="ghost-button" onClick={() => void onRefreshDataManager()} disabled={loading}>
+                {tr("refresh")}
+              </button>
+            </div>
+
+            {activeDataTab === "recipes" ? (
+              <div className="manager-grid">
+                <div>
+                  <h3>{tr("add_ingredient")}</h3>
+                  <form onSubmit={onAddRecipeIngredient} className="stack-form">
+                    <label>
+                      {tr("ingredient_name")}
+                      <input
+                        value={recipeIngredientName}
+                        onChange={(event) => setRecipeIngredientName(event.target.value)}
+                        required
+                      />
+                    </label>
+                    <div className="inline-grid">
+                      <label>
+                        {tr("ingredient_type")}
+                        <input
+                          value={recipeIngredientType}
+                          onChange={(event) => setRecipeIngredientType(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <label>
+                        {tr("amount")}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={recipeIngredientAmount}
+                          onChange={(event) => setRecipeIngredientAmount(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <label>
+                        {tr("unit")}
+                        <input
+                          value={recipeIngredientUnit}
+                          onChange={(event) => setRecipeIngredientUnit(event.target.value)}
+                          required
+                        />
+                      </label>
+                    </div>
+                    <div className="inline-grid">
+                      <label>
+                        {tr("stage")}
+                        <input
+                          value={recipeIngredientStage}
+                          onChange={(event) => setRecipeIngredientStage(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <label>
+                        {tr("minute_added")}
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={recipeIngredientMinute}
+                          onChange={(event) => setRecipeIngredientMinute(event.target.value)}
+                          required
+                        />
+                      </label>
+                    </div>
+                    <button className="ghost-button" type="submit" disabled={loading}>
+                      {tr("add_ingredient")}
+                    </button>
+                  </form>
+
+                  {recipeIngredientsDraft.length ? (
+                    <ul className="list compact-list">
+                      {recipeIngredientsDraft.map((ingredient, index) => (
+                        <li key={`${ingredient.name}-${index}`} className="list-with-action">
+                          <span>
+                            {ingredient.name} ({ingredient.ingredient_type}) - {ingredient.amount} {ingredient.unit}
+                          </span>
+                          <button className="ghost-button" onClick={() => onRemoveRecipeIngredient(index)}>
+                            {tr("remove")}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="inline-note">{tr("list_empty")}</p>
+                  )}
+
+                  <h3>{tr("new_recipe")}</h3>
+                  <form onSubmit={onCreateRecipe} className="stack-form">
+                    <label>
+                      {tr("recipe_name")}
+                      <input value={recipeName} onChange={(event) => setRecipeName(event.target.value)} required />
+                    </label>
+                    <div className="inline-grid">
+                      <label>
+                        {tr("style")}
+                        <input value={recipeStyle} onChange={(event) => setRecipeStyle(event.target.value)} required />
+                      </label>
+                      <label>
+                        {tr("efficiency")}
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={recipeEfficiency}
+                          onChange={(event) => setRecipeEfficiency(event.target.value)}
+                          required
+                        />
+                      </label>
+                    </div>
+                    <div className="inline-grid">
+                      <label>
+                        {tr("target_og")}
+                        <input
+                          type="number"
+                          min="1"
+                          max="1.2"
+                          step="0.001"
+                          value={recipeOg}
+                          onChange={(event) => setRecipeOg(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <label>
+                        {tr("target_fg")}
+                        <input
+                          type="number"
+                          min="0.99"
+                          max="1.2"
+                          step="0.001"
+                          value={recipeFg}
+                          onChange={(event) => setRecipeFg(event.target.value)}
+                          required
+                        />
+                      </label>
+                    </div>
+                    <div className="inline-grid">
+                      <label>
+                        {tr("target_ibu")}
+                        <input
+                          type="number"
+                          min="0"
+                          max="150"
+                          step="0.1"
+                          value={recipeIbu}
+                          onChange={(event) => setRecipeIbu(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <label>
+                        {tr("target_srm")}
+                        <input
+                          type="number"
+                          min="0"
+                          max="80"
+                          step="0.1"
+                          value={recipeSrm}
+                          onChange={(event) => setRecipeSrm(event.target.value)}
+                          required
+                        />
+                      </label>
+                    </div>
+                    <label>
+                      {tr("notes")}
+                      <input value={recipeNotes} onChange={(event) => setRecipeNotes(event.target.value)} />
+                    </label>
+                    <button className="primary-button" type="submit" disabled={loading}>
+                      {tr("create")}
+                    </button>
+                  </form>
+                </div>
+                <div>
+                  <h3>{tr("recipes")}</h3>
+                  {recipes.length ? (
+                    <ul className="list compact-list">
+                      {recipes.map((recipe) => (
+                        <li key={recipe.id}>
+                          <strong>#{recipe.id}</strong> {recipe.name} ({recipe.style}) - {recipe.ingredients.length} ingredients
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="inline-note">{tr("list_empty")}</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            {activeDataTab === "ingredients" ? (
+              <div className="manager-grid">
+                <div>
+                  <h3>{tr("new_ingredient")}</h3>
+                  <form onSubmit={onCreateIngredient} className="stack-form">
+                    <label>
+                      {tr("ingredient_name")}
+                      <input value={ingredientName} onChange={(event) => setIngredientName(event.target.value)} required />
+                    </label>
+                    <div className="inline-grid">
+                      <label>
+                        {tr("ingredient_type")}
+                        <input value={ingredientType} onChange={(event) => setIngredientType(event.target.value)} required />
+                      </label>
+                      <label>
+                        {tr("default_unit")}
+                        <input value={ingredientUnit} onChange={(event) => setIngredientUnit(event.target.value)} required />
+                      </label>
+                    </div>
+                    <label>
+                      {tr("notes")}
+                      <input value={ingredientNotes} onChange={(event) => setIngredientNotes(event.target.value)} />
+                    </label>
+                    <button className="primary-button" type="submit" disabled={loading}>
+                      {tr("create")}
+                    </button>
+                  </form>
+                </div>
+                <div>
+                  <h3>{tr("ingredients")}</h3>
+                  {ingredientProfiles.length ? (
+                    <ul className="list compact-list">
+                      {ingredientProfiles.map((ingredient) => (
+                        <li key={ingredient.id}>
+                          <strong>#{ingredient.id}</strong> {ingredient.name} ({ingredient.ingredient_type}) - {ingredient.default_unit}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="inline-note">{tr("list_empty")}</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            {activeDataTab === "equipment" ? (
+              <div className="manager-grid">
+                <div>
+                  <h3>{tr("new_equipment")}</h3>
+                  <form onSubmit={onCreateEquipment} className="stack-form">
+                    <label>
+                      {tr("equipment_profile")}
+                      <input value={equipmentName} onChange={(event) => setEquipmentName(event.target.value)} required />
+                    </label>
+                    <div className="inline-grid">
+                      <label>
+                        {tr("batch_volume")}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={equipmentBatchVolume}
+                          onChange={(event) => setEquipmentBatchVolume(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <label>
+                        {tr("brewhouse_efficiency")}
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={equipmentEfficiency}
+                          onChange={(event) => setEquipmentEfficiency(event.target.value)}
+                          required
+                        />
+                      </label>
+                    </div>
+                    <div className="inline-grid">
+                      <label>
+                        {tr("mash_tun_volume")}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={equipmentMashTunVolume}
+                          onChange={(event) => setEquipmentMashTunVolume(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        {tr("boil_kettle_volume")}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={equipmentBoilKettleVolume}
+                          onChange={(event) => setEquipmentBoilKettleVolume(event.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <div className="inline-grid">
+                      <label>
+                        {tr("boil_off_rate")}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={equipmentBoilOffRate}
+                          onChange={(event) => setEquipmentBoilOffRate(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        {tr("trub_loss")}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={equipmentTrubLoss}
+                          onChange={(event) => setEquipmentTrubLoss(event.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <label>
+                      {tr("notes")}
+                      <input value={equipmentNotes} onChange={(event) => setEquipmentNotes(event.target.value)} />
+                    </label>
+                    <button className="primary-button" type="submit" disabled={loading}>
+                      {tr("create")}
+                    </button>
+                  </form>
+                </div>
+                <div>
+                  <h3>{tr("equipment")}</h3>
+                  {equipmentProfiles.length ? (
+                    <ul className="list compact-list">
+                      {equipmentProfiles.map((equipment) => (
+                        <li key={equipment.id}>
+                          <strong>#{equipment.id}</strong> {equipment.name}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="inline-note">{tr("list_empty")}</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </section>
         </section>
       )}
     </main>
@@ -754,6 +1434,18 @@ function DataRow({ label, value, unit }: { label: string; value: number; unit: s
       </strong>
     </div>
   );
+}
+
+function parseOptionalNumber(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return parsed;
 }
 
 function formatTimer(totalSeconds: number): string {
