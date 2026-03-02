@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401
 from app.api.ai import router as ai_router
@@ -25,6 +26,14 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name)
 
     app.add_middleware(ObservabilityMiddleware)
+    origins = [origin.strip() for origin in settings.cors_allow_origins.split(",") if origin.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     if settings.auto_create_tables:
         Base.metadata.create_all(bind=engine)

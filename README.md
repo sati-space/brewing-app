@@ -6,6 +6,7 @@ This repo currently contains:
 
 - A detailed MVP plan.
 - A Python FastAPI backend scaffold.
+- A React + TypeScript web frontend scaffold (Vite).
 - SQL schema + seed data.
 - Integration tests for key API flows.
 - Alembic migrations and PostgreSQL local setup.
@@ -19,6 +20,7 @@ This repo currently contains:
 
 - **Python**: fast iteration for API + AI features.
 - **SQL**: explicit schema for recipes, batches, fermentation, and inventory.
+- **React + TypeScript**: smooth SPA UX now, easy logic reuse later in React Native.
 - **C# compatible**: API-first design so a future C# client (Blazor, MAUI, ASP.NET) can plug in cleanly.
 
 ## Project layout
@@ -36,6 +38,10 @@ backend/
     schemas/
     services/
   tests/
+frontend/
+  src/
+  index.html
+  package.json
 sql/
   schema.sql
   seed.sql
@@ -60,6 +66,18 @@ API docs:
 
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - Health check: `http://127.0.0.1:8000/api/v1/health`
+
+## Frontend quick start (React + TypeScript)
+
+```bash
+# from repo root
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Web app default URL: `http://127.0.0.1:5173`
 
 ## Auth endpoints
 
@@ -244,7 +262,7 @@ alembic downgrade -1
 
 ## Next build steps
 
-1. Add frontend (recommended: React Native or Blazor Hybrid).
+1. Add React Native apps (iOS + Android) reusing API contracts and domain logic.
 2. Add brew analytics dashboards (efficiency trends, fermentation variance, repeatability).
 3. Add device/sensor integrations for automated readings.
 4. Add CI pipeline for lint/test/migration checks.
