@@ -1,7 +1,9 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import type { Translator } from "../i18n";
 import type {
+  Batch,
+  BatchCreate,
   EquipmentProfile,
   EquipmentProfileCreate,
   IngredientProfile,
@@ -10,18 +12,20 @@ import type {
   RecipeCreate,
 } from "../types";
 
-type DataTab = "recipes" | "ingredients" | "equipment";
+type DataTab = "recipes" | "ingredients" | "equipment" | "batches";
 
 interface DataManagerPanelProps {
   loading: boolean;
   tr: Translator;
   recipes: Recipe[];
+  batches: Batch[];
   ingredientProfiles: IngredientProfile[];
   equipmentProfiles: EquipmentProfile[];
   onRefresh: () => Promise<void>;
   onCreateIngredient: (payload: IngredientProfileCreate) => Promise<boolean>;
   onCreateEquipment: (payload: EquipmentProfileCreate) => Promise<boolean>;
   onCreateRecipe: (payload: RecipeCreate) => Promise<boolean>;
+  onCreateBatch: (payload: BatchCreate) => Promise<boolean>;
   onClientError: (message: string) => void;
   panelId?: string;
 }
@@ -30,12 +34,14 @@ export function DataManagerPanel({
   loading,
   tr,
   recipes,
+  batches,
   ingredientProfiles,
   equipmentProfiles,
   onRefresh,
   onCreateIngredient,
   onCreateEquipment,
   onCreateRecipe,
+  onCreateBatch,
   onClientError,
   panelId,
 }: DataManagerPanelProps) {
@@ -70,6 +76,21 @@ export function DataManagerPanel({
   const [recipeIngredientStage, setRecipeIngredientStage] = useState("mash");
   const [recipeIngredientMinute, setRecipeIngredientMinute] = useState("0");
   const [recipeIngredientsDraft, setRecipeIngredientsDraft] = useState<RecipeCreate["ingredients"]>([]);
+
+  const [batchRecipeId, setBatchRecipeId] = useState<string>("");
+  const [batchName, setBatchName] = useState("");
+  const [batchBrewedOn, setBatchBrewedOn] = useState(todayDateString());
+  const [batchStatus, setBatchStatus] = useState("planned");
+  const [batchVolume, setBatchVolume] = useState("20");
+  const [batchMeasuredOg, setBatchMeasuredOg] = useState("");
+  const [batchMeasuredFg, setBatchMeasuredFg] = useState("");
+  const [batchNotes, setBatchNotes] = useState("");
+
+  useEffect(() => {
+    if (!batchRecipeId && recipes.length > 0) {
+      setBatchRecipeId(String(recipes[0].id));
+    }
+  }, [batchRecipeId, recipes]);
 
   async function handleCreateIngredient(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -181,6 +202,49 @@ export function DataManagerPanel({
     }
   }
 
+  async function handleCreateBatch(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+
+    if (!batchRecipeId) {
+      onClientError("Select a recipe before creating a batch.");
+      return;
+    }
+
+    const volumeLiters = Number(batchVolume);
+    if (!Number.isFinite(volumeLiters) || volumeLiters <= 0) {
+      onClientError("Batch volume must be a valid positive number.");
+      return;
+    }
+
+    const measuredOg = parseOptionalNumber(batchMeasuredOg);
+    const measuredFg = parseOptionalNumber(batchMeasuredFg);
+    if ((measuredOg !== null && (measuredOg <= 1.0 || measuredOg >= 1.2)) || (measuredFg !== null && (measuredFg <= 0.99 || measuredFg >= 1.2))) {
+      onClientError("Measured OG/FG must be within expected brewing ranges.");
+      return;
+    }
+
+    const created = await onCreateBatch({
+      recipe_id: Number(batchRecipeId),
+      name: batchName.trim(),
+      brewed_on: batchBrewedOn,
+      status: batchStatus.trim(),
+      volume_liters: volumeLiters,
+      measured_og: measuredOg,
+      measured_fg: measuredFg,
+      notes: batchNotes.trim(),
+    });
+
+    if (created) {
+      setBatchName("");
+      setBatchBrewedOn(todayDateString());
+      setBatchStatus("planned");
+      setBatchVolume("20");
+      setBatchMeasuredOg("");
+      setBatchMeasuredFg("");
+      setBatchNotes("");
+    }
+  }
+
   return (
     <section className="panel span-two" id={panelId}>
       <h2>{tr("data_manager")}</h2>
@@ -194,6 +258,9 @@ export function DataManagerPanel({
         </button>
         <button className={activeTab === "equipment" ? "tab active" : "tab"} onClick={() => setActiveTab("equipment")}>
           {tr("equipment")}
+        </button>
+        <button className={activeTab === "batches" ? "tab active" : "tab"} onClick={() => setActiveTab("batches")}>
+          {tr("batches")}
         </button>
       </div>
 
@@ -551,6 +618,123 @@ export function DataManagerPanel({
           </div>
         </div>
       ) : null}
+
+      {activeTab === "batches" ? (
+        <div className="manager-grid">
+          <div>
+            <h3>{tr("new_batch")}</h3>
+            {recipes.length ? (
+              <form onSubmit={(event) => void handleCreateBatch(event)} className="stack-form">
+                <label>
+                  {tr("recipe")}
+                  <select value={batchRecipeId} onChange={(event) => setBatchRecipeId(event.target.value)} required>
+                    <option value="">{tr("choose_recipe")}</option>
+                    {recipes.map((recipe) => (
+                      <option key={recipe.id} value={recipe.id}>
+                        #{recipe.id} - {recipe.name} ({recipe.style})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  {tr("batch_name")}
+                  <input value={batchName} onChange={(event) => setBatchName(event.target.value)} required />
+                </label>
+
+                <div className="inline-grid">
+                  <label>
+                    {tr("brewed_on")}
+                    <input
+                      type="date"
+                      value={batchBrewedOn}
+                      onChange={(event) => setBatchBrewedOn(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label>
+                    {tr("status")}
+                    <select value={batchStatus} onChange={(event) => setBatchStatus(event.target.value)}>
+                      <option value="planned">planned</option>
+                      <option value="brewing">brewing</option>
+                      <option value="fermenting">fermenting</option>
+                      <option value="conditioning">conditioning</option>
+                      <option value="packaged">packaged</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="inline-grid">
+                  <label>
+                    {tr("volume_liters")}
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={batchVolume}
+                      onChange={(event) => setBatchVolume(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label>
+                    {tr("measured_og")}
+                    <input
+                      type="number"
+                      min="1"
+                      max="1.2"
+                      step="0.001"
+                      value={batchMeasuredOg}
+                      onChange={(event) => setBatchMeasuredOg(event.target.value)}
+                      placeholder="optional"
+                    />
+                  </label>
+                </div>
+
+                <div className="inline-grid">
+                  <label>
+                    {tr("measured_fg")}
+                    <input
+                      type="number"
+                      min="0.99"
+                      max="1.2"
+                      step="0.001"
+                      value={batchMeasuredFg}
+                      onChange={(event) => setBatchMeasuredFg(event.target.value)}
+                      placeholder="optional"
+                    />
+                  </label>
+                  <label>
+                    {tr("notes")}
+                    <input value={batchNotes} onChange={(event) => setBatchNotes(event.target.value)} />
+                  </label>
+                </div>
+
+                <button className="primary-button" type="submit" disabled={loading}>
+                  {tr("create")}
+                </button>
+              </form>
+            ) : (
+              <p className="inline-note">{tr("no_recipes_yet")}</p>
+            )}
+          </div>
+
+          <div>
+            <h3>{tr("batches")}</h3>
+            {batches.length ? (
+              <ul className="list compact-list">
+                {batches.map((batch) => (
+                  <li key={batch.id}>
+                    <strong>#{batch.id}</strong> {batch.name} ({batch.status}) - {batch.volume_liters} L
+                    {` • ${resolveRecipeName(recipes, batch.recipe_id)}`}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="inline-note">{tr("list_empty")}</p>
+            )}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -565,4 +749,13 @@ function parseOptionalNumber(value: string): number | null {
     return null;
   }
   return parsed;
+}
+
+function todayDateString(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function resolveRecipeName(recipes: Recipe[], recipeId: number): string {
+  const recipe = recipes.find((item) => item.id === recipeId);
+  return recipe ? recipe.name : `recipe ${recipeId}`;
 }

@@ -31,6 +31,17 @@ export interface Batch {
   created_at: string;
 }
 
+export interface BatchCreate {
+  recipe_id: number;
+  name: string;
+  brewed_on: string;
+  status: string;
+  volume_liters: number;
+  measured_og: number | null;
+  measured_fg: number | null;
+  notes: string;
+}
+
 export interface EquipmentProfile {
   id: number;
   name: string;

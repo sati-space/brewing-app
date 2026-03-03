@@ -50,6 +50,17 @@ export type TranslationKey =
   | "equipment"
   | "refresh"
   | "create"
+  | "batches"
+  | "new_batch"
+  | "recipe"
+  | "batch_name"
+  | "brewed_on"
+  | "status"
+  | "volume_liters"
+  | "measured_og"
+  | "measured_fg"
+  | "choose_recipe"
+  | "no_recipes_yet"
   | "new_recipe"
   | "recipe_name"
   | "style"
@@ -138,6 +149,17 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     equipment: "Equipment",
     refresh: "Refresh",
     create: "Create",
+    batches: "Batches",
+    new_batch: "New Batch",
+    recipe: "Recipe",
+    batch_name: "Batch Name",
+    brewed_on: "Brewed On",
+    status: "Status",
+    volume_liters: "Volume (L)",
+    measured_og: "Measured OG",
+    measured_fg: "Measured FG",
+    choose_recipe: "Choose recipe",
+    no_recipes_yet: "Create at least one recipe first.",
     new_recipe: "New Recipe",
     recipe_name: "Recipe Name",
     style: "Style",
@@ -169,7 +191,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     getting_started_title: "Get Started",
     getting_started_intro: "Set up your brew workspace in three quick steps.",
     getting_started_step_1: "Create one recipe and one equipment profile in Data Manager.",
-    getting_started_step_2: "Create a batch for your recipe using API Docs.",
+    getting_started_step_2: "Create a batch in Data Manager (Batches tab).",
     getting_started_step_3: "Return here, select your batch, and generate a brew plan.",
     open_api_docs: "Open API Docs",
   },
@@ -223,6 +245,17 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     equipment: "Equipos",
     refresh: "Actualizar",
     create: "Crear",
+    batches: "Lotes",
+    new_batch: "Nuevo lote",
+    recipe: "Receta",
+    batch_name: "Nombre del lote",
+    brewed_on: "Fecha de brew",
+    status: "Estado",
+    volume_liters: "Volumen (L)",
+    measured_og: "OG medida",
+    measured_fg: "FG medida",
+    choose_recipe: "Selecciona receta",
+    no_recipes_yet: "Crea al menos una receta primero.",
     new_recipe: "Nueva receta",
     recipe_name: "Nombre de receta",
     style: "Estilo",
@@ -254,7 +287,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     getting_started_title: "Primeros pasos",
     getting_started_intro: "Configura tu espacio de brew en tres pasos.",
     getting_started_step_1: "Crea una receta y un perfil de equipo en el gestor de datos.",
-    getting_started_step_2: "Crea un lote para tu receta usando la documentacion del API.",
+    getting_started_step_2: "Crea un lote en el gestor de datos (pestaña Lotes).",
     getting_started_step_3: "Vuelve aqui, selecciona el lote y genera un brew plan.",
     open_api_docs: "Abrir API Docs",
   },
