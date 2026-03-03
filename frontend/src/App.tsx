@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { apiRequest, APIError, apiBaseUrl } from "./api";
+import { AIAssistantPanel } from "./components/AIAssistantPanel";
 import { AuthPanel, type AuthSubmitPayload } from "./components/AuthPanel";
 import { BrewPlannerPanel } from "./components/BrewPlannerPanel";
 import { BrewSummaryPanel } from "./components/BrewSummaryPanel";
@@ -12,6 +13,7 @@ import { ShoppingListPanel } from "./components/ShoppingListPanel";
 import { TimerPanel, type TimerState } from "./components/TimerPanel";
 import { translate, type TranslationKey } from "./i18n";
 import type {
+  AIAnalysisResponse,
   Batch,
   BatchCreate,
   BrewPlan,
@@ -432,6 +434,68 @@ function App() {
     }
   }
 
+  async function onOptimizeRecipe(payload: {
+    recipeId: number;
+    measuredOg: number | null;
+    measuredFg: number | null;
+  }): Promise<AIAnalysisResponse | null> {
+    if (!token) {
+      return null;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      return await apiRequest<AIAnalysisResponse>(
+        "/ai/recipe-optimize",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            recipe_id: payload.recipeId,
+            measured_og: payload.measuredOg ?? undefined,
+            measured_fg: payload.measuredFg ?? undefined,
+          }),
+        },
+        token,
+      );
+    } catch (err) {
+      setError(toMessage(err));
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onDiagnoseFermentation(batchId: number): Promise<AIAnalysisResponse | null> {
+    if (!token) {
+      return null;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      return await apiRequest<AIAnalysisResponse>(
+        "/ai/fermentation-diagnose",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            batch_id: batchId,
+          }),
+        },
+        token,
+      );
+    } catch (err) {
+      setError(toMessage(err));
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function onStartPause(): void {
     if (!brewPlan?.timer_plan.length) {
       return;
@@ -548,6 +612,20 @@ function App() {
           />
 
           <BrewSummaryPanel tr={tr} brewPlan={brewPlan} onJumpToDataManager={onJumpToDataManager} />
+
+          <AIAssistantPanel
+            loading={loading}
+            tr={tr}
+            recipes={recipes}
+            batches={batches}
+            selectedBatchId={selectedBatchId}
+            onOptimizeRecipe={onOptimizeRecipe}
+            onDiagnoseFermentation={onDiagnoseFermentation}
+            onClientError={(message) => {
+              setSuccess(null);
+              setError(message);
+            }}
+          />
 
           <TimerPanel
             tr={tr}

@@ -191,3 +191,16 @@ export interface BrewPlanApplyResult {
   created_step_count: number;
   notes: string[];
 }
+
+export interface AISuggestion {
+  title: string;
+  rationale: string;
+  action: string;
+  priority: string;
+}
+
+export interface AIAnalysisResponse {
+  summary: string;
+  suggestions: AISuggestion[];
+  source: string;
+}

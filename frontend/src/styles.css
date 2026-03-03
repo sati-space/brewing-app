@@ -333,6 +333,14 @@ select:focus {
   font-size: 0.92rem;
 }
 
+.ai-grid h3 {
+  margin-top: 0;
+}
+
+.ai-panel .compact-list li {
+  line-height: 1.4;
+}
+
 .list-with-action {
   display: flex;
   justify-content: space-between;
