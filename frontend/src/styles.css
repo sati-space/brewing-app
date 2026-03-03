@@ -306,6 +306,9 @@ select:focus {
 }
 
 .manager-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
   margin-bottom: 0.2rem;
 }
 

@@ -13,6 +13,7 @@ import { TimerPanel, type TimerState } from "./components/TimerPanel";
 import { translate, type TranslationKey } from "./i18n";
 import type {
   Batch,
+  BatchCreate,
   BrewPlan,
   BrewPlanApplyResult,
   EquipmentProfile,
@@ -327,6 +328,36 @@ function App() {
     }
   }
 
+  async function onCreateBatch(payload: BatchCreate): Promise<boolean> {
+    if (!token) {
+      return false;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const created = await apiRequest<Batch>(
+        "/batches",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        token,
+      );
+      setBatches((previous) => [created, ...previous]);
+      setSelectedBatchId(created.id);
+      setSuccess("Batch created.");
+      return true;
+    } catch (err) {
+      setError(toMessage(err));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function onGenerateBrewPlan(): Promise<void> {
     if (!token || !selectedBatchId) {
       return;
@@ -535,12 +566,14 @@ function App() {
             loading={loading}
             tr={tr}
             recipes={recipes}
+            batches={batches}
             ingredientProfiles={ingredientProfiles}
             equipmentProfiles={equipmentProfiles}
             onRefresh={onRefreshDataManager}
             onCreateIngredient={onCreateIngredient}
             onCreateEquipment={onCreateEquipment}
             onCreateRecipe={onCreateRecipe}
+            onCreateBatch={onCreateBatch}
             onClientError={(message) => {
               setSuccess(null);
               setError(message);
