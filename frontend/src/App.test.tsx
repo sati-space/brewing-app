@@ -117,6 +117,43 @@ function installDashboardMocksForToken(expectedToken: string): void {
   });
 }
 
+function installDashboardWithIngredientCreateMocks(expectedToken: string): void {
+  mockApiRequest.mockImplementation((path, options, token) => {
+    if (path === "/auth/me") {
+      expect(token).toBe(expectedToken);
+      return Promise.resolve(testUser);
+    }
+    if (path === "/batches") {
+      return Promise.resolve([]);
+    }
+    if (path === "/equipment") {
+      return Promise.resolve([]);
+    }
+    if (path === "/water-profiles") {
+      return Promise.resolve([]);
+    }
+    if (path === "/ingredients") {
+      if (options?.method === "POST") {
+        const body = JSON.parse(String(options.body)) as {
+          name: string;
+          ingredient_type: string;
+          default_unit: string;
+          notes: string;
+        };
+        return Promise.resolve({
+          id: 42,
+          ...body,
+        });
+      }
+      return Promise.resolve([]);
+    }
+    if (path === "/recipes") {
+      return Promise.resolve([]);
+    }
+    return Promise.reject(new Error(`Unexpected path: ${path}`));
+  });
+}
+
 describe("App integration", () => {
   beforeEach(() => {
     localStorage.removeItem("brewpilot.token");
@@ -261,5 +298,90 @@ describe("App integration", () => {
     });
     expect(localStorage.getItem("brewpilot.token")).toBeNull();
     expect(localStorage.getItem("brewpilot.user")).toBeNull();
+  });
+
+  it("creates ingredient from data manager and shows it in the list", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("brewpilot.token", "stored-token");
+    localStorage.setItem("brewpilot.user", JSON.stringify(testUser));
+    installDashboardWithIngredientCreateMocks("stored-token");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
+    });
+
+    const dataManagerHeading = screen.getByRole("heading", { name: "Data Manager" });
+    const dataManagerPanel = dataManagerHeading.closest("section");
+    if (!dataManagerPanel) {
+      throw new Error("Data manager panel not found");
+    }
+    const panel = within(dataManagerPanel);
+
+    await user.click(panel.getByRole("button", { name: "Ingredients" }));
+    await user.type(panel.getByLabelText("Ingredient Name"), "Simcoe");
+    await user.clear(panel.getByLabelText("Ingredient Type"));
+    await user.type(panel.getByLabelText("Ingredient Type"), "hop");
+    await user.clear(panel.getByLabelText("Default Unit"));
+    await user.type(panel.getByLabelText("Default Unit"), "oz");
+    await user.type(panel.getByLabelText("Notes"), "pine and citrus");
+    await user.click(panel.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Ingredient created.")).toBeInTheDocument();
+      expect(panel.getByText(/Simcoe \(hop\) - oz/)).toBeInTheDocument();
+    });
+
+    expect(panel.getByLabelText("Ingredient Name")).toHaveValue("");
+    expect(panel.getByLabelText("Notes")).toHaveValue("");
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      "/ingredients",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Simcoe",
+          ingredient_type: "hop",
+          default_unit: "oz",
+          notes: "pine and citrus",
+        }),
+      },
+      "stored-token",
+    );
+  });
+
+  it("shows client validation errors for invalid equipment form values", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("brewpilot.token", "stored-token");
+    localStorage.setItem("brewpilot.user", JSON.stringify(testUser));
+    installDashboardOnlyMocks();
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
+    });
+
+    const dataManagerHeading = screen.getByRole("heading", { name: "Data Manager" });
+    const dataManagerPanel = dataManagerHeading.closest("section");
+    if (!dataManagerPanel) {
+      throw new Error("Data manager panel not found");
+    }
+    const panel = within(dataManagerPanel);
+
+    await user.click(panel.getByRole("button", { name: "Equipment" }));
+    await user.type(panel.getByLabelText("Equipment"), "Garage Kettle");
+    await user.clear(panel.getByLabelText("Batch Volume (L)"));
+    await user.type(panel.getByLabelText("Batch Volume (L)"), "0");
+    await user.click(panel.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Equipment volume and efficiency must be valid positive numbers.")).toBeInTheDocument();
+    });
+
+    const equipmentCreateCalls = mockApiRequest.mock.calls.filter(
+      ([path, options]) => path === "/equipment" && options?.method === "POST",
+    );
+    expect(equipmentCreateCalls).toHaveLength(0);
   });
 });
