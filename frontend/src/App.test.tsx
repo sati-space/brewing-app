@@ -273,6 +273,19 @@ function installDashboardWithAIErrorMocks(expectedToken: string): void {
   });
 }
 
+function installExpiredTokenMocks(expectedToken: string): void {
+  mockApiRequest.mockImplementation((path, _options, token) => {
+    if (path === "/auth/me") {
+      expect(token).toBe(expectedToken);
+      return Promise.reject(new APIError(401, "Invalid token"));
+    }
+    if (path === "/batches" || path === "/equipment" || path === "/water-profiles" || path === "/ingredients" || path === "/recipes") {
+      return Promise.resolve([]);
+    }
+    return Promise.reject(new Error(`Unexpected path: ${path}`));
+  });
+}
+
 describe("App integration", () => {
   beforeEach(() => {
     localStorage.removeItem("brewpilot.token");
@@ -293,7 +306,7 @@ describe("App integration", () => {
     await waitFor(() => {
       expect(screen.getByText("Authenticated.")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: "Preferences" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
     });
 
     expect(localStorage.getItem("brewpilot.token")).toBe("token-123");
@@ -345,7 +358,7 @@ describe("App integration", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: "Preferences" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
     });
 
     expect(mockApiRequest).not.toHaveBeenCalledWith("/auth/login", expect.anything(), expect.anything());
@@ -361,8 +374,10 @@ describe("App integration", () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
     });
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
 
     const preferencesHeading = screen.getByRole("heading", { name: "Preferences" });
     const preferencesPanel = preferencesHeading.closest("section");
@@ -395,6 +410,23 @@ describe("App integration", () => {
     expect(localStorage.getItem("brewpilot.user")).toContain("\"preferred_unit_system\":\"imperial\"");
     expect(localStorage.getItem("brewpilot.user")).toContain("\"preferred_temperature_unit\":\"F\"");
     expect(localStorage.getItem("brewpilot.user")).toContain("\"preferred_language\":\"es\"");
+  });
+
+  it("clears stale token and sends user back to auth when dashboard bootstrap gets 401", async () => {
+    localStorage.setItem("brewpilot.token", "expired-token");
+    localStorage.setItem("brewpilot.user", JSON.stringify(testUser));
+    installExpiredTokenMocks("expired-token");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Session expired. Please log in again.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument();
+    });
+
+    expect(localStorage.getItem("brewpilot.token")).toBeNull();
+    expect(localStorage.getItem("brewpilot.user")).toBeNull();
   });
 
   it("logs out and clears local session state", async () => {

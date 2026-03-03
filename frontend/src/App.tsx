@@ -65,6 +65,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [showPreferences, setShowPreferences] = useState(false);
 
   const uiLanguage: Language = overrideLanguage || user?.preferred_language || "en";
   const tr = (key: TranslationKey): string => translate(uiLanguage, key);
@@ -142,7 +143,9 @@ function App() {
       }
       return true;
     } catch (err) {
-      setError(toMessage(err));
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
       return false;
     } finally {
       setLoading(false);
@@ -188,7 +191,7 @@ function App() {
     }
   }
 
-  function onLogout(): void {
+  function clearSession(): void {
     setToken(null);
     setUser(null);
     setBatches([]);
@@ -199,8 +202,25 @@ function App() {
     setBrewPlan(null);
     setApplyResult(null);
     setTimer({ stepIndex: 0, running: false, remainingSeconds: 0 });
+    setShowPreferences(false);
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     localStorage.removeItem(USER_STORAGE_KEY);
+  }
+
+  function onLogout(): void {
+    clearSession();
+    setError(null);
+    setSuccess(null);
+  }
+
+  function handleUnauthorized(error: unknown): boolean {
+    if (error instanceof APIError && error.status === 401) {
+      clearSession();
+      setSuccess(null);
+      setError(tr("session_expired"));
+      return true;
+    }
+    return false;
   }
 
   async function onSavePreferences(): Promise<void> {
@@ -228,7 +248,9 @@ function App() {
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
       setSuccess("Preferences saved.");
     } catch (err) {
-      setError(toMessage(err));
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
     } finally {
       setLoading(false);
     }
@@ -264,7 +286,9 @@ function App() {
       setSuccess("Ingredient created.");
       return true;
     } catch (err) {
-      setError(toMessage(err));
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
       return false;
     } finally {
       setLoading(false);
@@ -294,7 +318,9 @@ function App() {
       setSuccess("Equipment profile created.");
       return true;
     } catch (err) {
-      setError(toMessage(err));
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
       return false;
     } finally {
       setLoading(false);
@@ -323,7 +349,9 @@ function App() {
       setSuccess("Recipe created.");
       return true;
     } catch (err) {
-      setError(toMessage(err));
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
       return false;
     } finally {
       setLoading(false);
@@ -353,7 +381,9 @@ function App() {
       setSuccess("Batch created.");
       return true;
     } catch (err) {
-      setError(toMessage(err));
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
       return false;
     } finally {
       setLoading(false);
@@ -395,7 +425,9 @@ function App() {
       });
       setSuccess("Brew plan loaded.");
     } catch (err) {
-      setError(toMessage(err));
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
     } finally {
       setLoading(false);
     }
@@ -428,7 +460,9 @@ function App() {
       setApplyResult(result);
       setSuccess("Timeline updated from brew plan.");
     } catch (err) {
-      setError(toMessage(err));
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
     } finally {
       setLoading(false);
     }
@@ -461,7 +495,9 @@ function App() {
         token,
       );
     } catch (err) {
-      setError(toMessage(err));
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
       return null;
     } finally {
       setLoading(false);
@@ -489,7 +525,9 @@ function App() {
         token,
       );
     } catch (err) {
-      setError(toMessage(err));
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
       return null;
     } finally {
       setLoading(false);
@@ -559,9 +597,14 @@ function App() {
           </p>
         </div>
         {token ? (
-          <button className="ghost-button" onClick={onLogout}>
-            {tr("logout")}
-          </button>
+          <div className="hero-actions">
+            <button className="ghost-button" onClick={() => setShowPreferences(true)}>
+              {tr("settings")}
+            </button>
+            <button className="ghost-button" onClick={onLogout}>
+              {tr("logout")}
+            </button>
+          </div>
         ) : null}
       </header>
 
@@ -573,18 +616,6 @@ function App() {
       ) : (
         <section className="dashboard-grid">
           {!hasMinimumSetup ? <OnboardingPanel tr={tr} onJumpToDataManager={onJumpToDataManager} /> : null}
-
-          <PreferencesPanel
-            loading={loading}
-            tr={tr}
-            unitSystem={prefUnitSystem}
-            temperatureUnit={prefTemperatureUnit}
-            language={prefLanguage}
-            onUnitSystemChange={setPrefUnitSystem}
-            onTemperatureUnitChange={setPrefTemperatureUnit}
-            onLanguageChange={setPrefLanguage}
-            onSave={onSavePreferences}
-          />
 
           <BrewPlannerPanel
             loading={loading}
@@ -660,6 +691,29 @@ function App() {
           />
         </section>
       )}
+
+      {token && showPreferences ? (
+        <div className="modal-backdrop" onClick={() => setShowPreferences(false)}>
+          <div className="modal-content" onClick={(event) => event.stopPropagation()}>
+            <PreferencesPanel
+              loading={loading}
+              tr={tr}
+              unitSystem={prefUnitSystem}
+              temperatureUnit={prefTemperatureUnit}
+              language={prefLanguage}
+              onUnitSystemChange={setPrefUnitSystem}
+              onTemperatureUnitChange={setPrefTemperatureUnit}
+              onLanguageChange={setPrefLanguage}
+              onSave={onSavePreferences}
+            />
+            <div className="button-row">
+              <button className="ghost-button" onClick={() => setShowPreferences(false)}>
+                {tr("close")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

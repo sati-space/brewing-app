@@ -52,6 +52,12 @@ body {
   margin-bottom: 1rem;
 }
 
+.hero-actions {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+}
+
 h1,
 h2,
 h3 {
@@ -395,6 +401,21 @@ select:focus {
   grid-column: 1 / -1;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(17, 22, 18, 0.4);
+  z-index: 30;
+}
+
+.modal-content {
+  width: min(520px, 100%);
+}
+
 @keyframes panel-in {
   from {
     opacity: 0;
@@ -432,6 +453,10 @@ select:focus {
 @media (max-width: 720px) {
   .hero {
     flex-direction: column;
+  }
+
+  .hero-actions {
+    width: 100%;
   }
 
   .dashboard-grid {
