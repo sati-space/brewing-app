@@ -95,6 +95,9 @@ export type TranslationKey =
   | "getting_started_step_2"
   | "getting_started_step_3"
   | "open_api_docs"
+  | "settings"
+  | "close"
+  | "session_expired"
   | "ai_assistant"
   | "optimize_recipe"
   | "diagnose_fermentation"
@@ -200,6 +203,9 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     getting_started_step_2: "Create a batch in Data Manager (Batches tab).",
     getting_started_step_3: "Return here, select your batch, and generate a brew plan.",
     open_api_docs: "Open API Docs",
+    settings: "Settings",
+    close: "Close",
+    session_expired: "Session expired. Please log in again.",
     ai_assistant: "AI Assistant",
     optimize_recipe: "Optimize Recipe",
     diagnose_fermentation: "Diagnose Fermentation",
@@ -302,6 +308,9 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     getting_started_step_2: "Crea un lote en el gestor de datos (pestaña Lotes).",
     getting_started_step_3: "Vuelve aqui, selecciona el lote y genera un brew plan.",
     open_api_docs: "Abrir API Docs",
+    settings: "Ajustes",
+    close: "Cerrar",
+    session_expired: "La sesion expiro. Inicia sesion nuevamente.",
     ai_assistant: "Asistente IA",
     optimize_recipe: "Optimizar receta",
     diagnose_fermentation: "Diagnosticar fermentacion",
