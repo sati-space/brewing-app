@@ -26,6 +26,32 @@ const testUser: User = {
   created_at: "2026-01-01T00:00:00Z",
 };
 
+const aiRecipe = {
+  id: 11,
+  name: "Test IPA",
+  style: "21A",
+  target_og: 1.06,
+  target_fg: 1.012,
+  target_ibu: 60,
+  target_srm: 8,
+  efficiency_pct: 72,
+  notes: "",
+  ingredients: [],
+};
+
+const aiBatch = {
+  id: 21,
+  recipe_id: 11,
+  name: "Test IPA Batch",
+  brewed_on: "2026-01-14",
+  status: "fermenting",
+  volume_liters: 20,
+  measured_og: null,
+  measured_fg: null,
+  notes: "",
+  created_at: "2026-01-14T00:00:00Z",
+};
+
 function installAuthAndDashboardMocks(): void {
   mockApiRequest.mockImplementation((path, _options, token) => {
     if (path === "/auth/login") {
@@ -149,6 +175,99 @@ function installDashboardWithIngredientCreateMocks(expectedToken: string): void 
     }
     if (path === "/recipes") {
       return Promise.resolve([]);
+    }
+    return Promise.reject(new Error(`Unexpected path: ${path}`));
+  });
+}
+
+function installDashboardWithAIMocks(expectedToken: string): void {
+  mockApiRequest.mockImplementation((path, options, token) => {
+    if (path === "/auth/me") {
+      expect(token).toBe(expectedToken);
+      return Promise.resolve(testUser);
+    }
+    if (path === "/batches") {
+      return Promise.resolve([aiBatch]);
+    }
+    if (path === "/equipment") {
+      return Promise.resolve([]);
+    }
+    if (path === "/water-profiles") {
+      return Promise.resolve([]);
+    }
+    if (path === "/ingredients") {
+      return Promise.resolve([]);
+    }
+    if (path === "/recipes") {
+      return Promise.resolve([aiRecipe]);
+    }
+    if (path === "/ai/recipe-optimize") {
+      expect(token).toBe(expectedToken);
+      const body = JSON.parse(String(options?.body)) as {
+        recipe_id: number;
+        measured_og: number;
+        measured_fg: number;
+      };
+      expect(body.recipe_id).toBe(11);
+      expect(body.measured_og).toBe(1.044);
+      expect(body.measured_fg).toBe(1.014);
+      return Promise.resolve({
+        summary: "Generated 1 recommendation(s) for recipe 'Test IPA'. Source: rules.",
+        source: "rules",
+        suggestions: [
+          {
+            title: "Raise mash efficiency",
+            rationale: "Measured OG indicates low extraction.",
+            action: "Increase crush quality and stir mash thoroughly.",
+            priority: "high",
+          },
+        ],
+      });
+    }
+    if (path === "/ai/fermentation-diagnose") {
+      expect(token).toBe(expectedToken);
+      const body = JSON.parse(String(options?.body)) as { batch_id: number };
+      expect(body.batch_id).toBe(21);
+      return Promise.resolve({
+        summary: "Generated 1 fermentation insight(s) for batch 'Test IPA Batch'. Source: rules.",
+        source: "rules",
+        suggestions: [
+          {
+            title: "Potential stalled fermentation",
+            rationale: "Gravity is dropping slower than expected.",
+            action: "Raise fermenter temperature by 1-2 C and rouse yeast.",
+            priority: "medium",
+          },
+        ],
+      });
+    }
+    return Promise.reject(new Error(`Unexpected path: ${path}`));
+  });
+}
+
+function installDashboardWithAIErrorMocks(expectedToken: string): void {
+  mockApiRequest.mockImplementation((path, _options, token) => {
+    if (path === "/auth/me") {
+      expect(token).toBe(expectedToken);
+      return Promise.resolve(testUser);
+    }
+    if (path === "/batches") {
+      return Promise.resolve([aiBatch]);
+    }
+    if (path === "/equipment") {
+      return Promise.resolve([]);
+    }
+    if (path === "/water-profiles") {
+      return Promise.resolve([]);
+    }
+    if (path === "/ingredients") {
+      return Promise.resolve([]);
+    }
+    if (path === "/recipes") {
+      return Promise.resolve([aiRecipe]);
+    }
+    if (path === "/ai/recipe-optimize") {
+      return Promise.reject(new APIError(422, "Invalid gravity input"));
     }
     return Promise.reject(new Error(`Unexpected path: ${path}`));
   });
@@ -383,5 +502,91 @@ describe("App integration", () => {
       ([path, options]) => path === "/equipment" && options?.method === "POST",
     );
     expect(equipmentCreateCalls).toHaveLength(0);
+  });
+
+  it("runs AI optimize and fermentation diagnose flows", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("brewpilot.token", "stored-token");
+    localStorage.setItem("brewpilot.user", JSON.stringify(testUser));
+    installDashboardWithAIMocks("stored-token");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "AI Assistant" })).toBeInTheDocument();
+    });
+
+    const heading = screen.getByRole("heading", { name: "AI Assistant" });
+    const panelElement = heading.closest("section");
+    if (!panelElement) {
+      throw new Error("AI panel not found");
+    }
+    const panel = within(panelElement);
+
+    await user.type(panel.getByLabelText("Measured OG"), "1.044");
+    await user.type(panel.getByLabelText("Measured FG"), "1.014");
+    await user.click(panel.getByRole("button", { name: "Optimize Recipe" }));
+
+    await waitFor(() => {
+      expect(panel.getByText("Raise mash efficiency")).toBeInTheDocument();
+      expect(panel.getByText(/Generated 1 recommendation\(s\)/)).toBeInTheDocument();
+    });
+
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      "/ai/recipe-optimize",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          recipe_id: 11,
+          measured_og: 1.044,
+          measured_fg: 1.014,
+        }),
+      },
+      "stored-token",
+    );
+
+    await user.click(panel.getByRole("button", { name: "Diagnose Fermentation" }));
+
+    await waitFor(() => {
+      expect(panel.getByText("Potential stalled fermentation")).toBeInTheDocument();
+      expect(panel.getByText(/Generated 1 fermentation insight\(s\)/)).toBeInTheDocument();
+    });
+
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      "/ai/fermentation-diagnose",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          batch_id: 21,
+        }),
+      },
+      "stored-token",
+    );
+  });
+
+  it("shows API errors from AI optimize endpoint", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("brewpilot.token", "stored-token");
+    localStorage.setItem("brewpilot.user", JSON.stringify(testUser));
+    installDashboardWithAIErrorMocks("stored-token");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "AI Assistant" })).toBeInTheDocument();
+    });
+
+    const heading = screen.getByRole("heading", { name: "AI Assistant" });
+    const panelElement = heading.closest("section");
+    if (!panelElement) {
+      throw new Error("AI panel not found");
+    }
+    const panel = within(panelElement);
+
+    await user.click(panel.getByRole("button", { name: "Optimize Recipe" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("422: Invalid gravity input")).toBeInTheDocument();
+    });
   });
 });

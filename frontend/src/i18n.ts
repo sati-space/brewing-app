@@ -94,7 +94,13 @@ export type TranslationKey =
   | "getting_started_step_1"
   | "getting_started_step_2"
   | "getting_started_step_3"
-  | "open_api_docs";
+  | "open_api_docs"
+  | "ai_assistant"
+  | "optimize_recipe"
+  | "diagnose_fermentation"
+  | "ai_latest_result"
+  | "ai_source"
+  | "ai_no_result";
 
 export type Translator = (key: TranslationKey) => string;
 
@@ -194,6 +200,12 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     getting_started_step_2: "Create a batch in Data Manager (Batches tab).",
     getting_started_step_3: "Return here, select your batch, and generate a brew plan.",
     open_api_docs: "Open API Docs",
+    ai_assistant: "AI Assistant",
+    optimize_recipe: "Optimize Recipe",
+    diagnose_fermentation: "Diagnose Fermentation",
+    ai_latest_result: "Latest AI Result",
+    ai_source: "Source",
+    ai_no_result: "No AI analysis yet.",
   },
   es: {
     app_title: "BrewPilot",
@@ -290,6 +302,12 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     getting_started_step_2: "Crea un lote en el gestor de datos (pestaña Lotes).",
     getting_started_step_3: "Vuelve aqui, selecciona el lote y genera un brew plan.",
     open_api_docs: "Abrir API Docs",
+    ai_assistant: "Asistente IA",
+    optimize_recipe: "Optimizar receta",
+    diagnose_fermentation: "Diagnosticar fermentacion",
+    ai_latest_result: "Ultimo resultado de IA",
+    ai_source: "Fuente",
+    ai_no_result: "Aun no hay analisis de IA.",
   },
 };
 
