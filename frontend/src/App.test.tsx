@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -83,6 +83,40 @@ function installDashboardOnlyMocks(): void {
   });
 }
 
+function installDashboardMocksForToken(expectedToken: string): void {
+  mockApiRequest.mockImplementation((path, _options, token) => {
+    if (path === "/auth/me") {
+      expect(token).toBe(expectedToken);
+      return Promise.resolve(testUser);
+    }
+    if (path === "/batches") {
+      return Promise.resolve([]);
+    }
+    if (path === "/equipment") {
+      return Promise.resolve([]);
+    }
+    if (path === "/water-profiles") {
+      return Promise.resolve([]);
+    }
+    if (path === "/ingredients") {
+      return Promise.resolve([]);
+    }
+    if (path === "/recipes") {
+      return Promise.resolve([]);
+    }
+    if (path === "/auth/me/preferences") {
+      expect(token).toBe(expectedToken);
+      return Promise.resolve({
+        ...testUser,
+        preferred_unit_system: "imperial",
+        preferred_temperature_unit: "F",
+        preferred_language: "es",
+      });
+    }
+    return Promise.reject(new Error(`Unexpected path: ${path}`));
+  });
+}
+
 describe("App integration", () => {
   beforeEach(() => {
     localStorage.removeItem("brewpilot.token");
@@ -160,5 +194,72 @@ describe("App integration", () => {
 
     expect(mockApiRequest).not.toHaveBeenCalledWith("/auth/login", expect.anything(), expect.anything());
     expect(mockApiRequest).toHaveBeenCalledWith("/auth/me", {}, "stored-token");
+  });
+
+  it("saves preferences and persists updated user locally", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("brewpilot.token", "stored-token");
+    localStorage.setItem("brewpilot.user", JSON.stringify(testUser));
+    installDashboardMocksForToken("stored-token");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
+    });
+
+    const preferencesHeading = screen.getByRole("heading", { name: "Preferences" });
+    const preferencesPanel = preferencesHeading.closest("section");
+    if (!preferencesPanel) {
+      throw new Error("Preferences panel not found");
+    }
+    const panel = within(preferencesPanel);
+
+    await user.selectOptions(panel.getByLabelText("Unit System"), "imperial");
+    await user.selectOptions(panel.getByLabelText("Temperature Unit"), "F");
+    await user.selectOptions(panel.getByLabelText("Language"), "es");
+    await user.click(panel.getByRole("button", { name: "Save Preferences" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Preferences saved.")).toBeInTheDocument();
+    });
+
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      "/auth/me/preferences",
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          preferred_unit_system: "imperial",
+          preferred_temperature_unit: "F",
+          preferred_language: "es",
+        }),
+      },
+      "stored-token",
+    );
+    expect(localStorage.getItem("brewpilot.user")).toContain("\"preferred_unit_system\":\"imperial\"");
+    expect(localStorage.getItem("brewpilot.user")).toContain("\"preferred_temperature_unit\":\"F\"");
+    expect(localStorage.getItem("brewpilot.user")).toContain("\"preferred_language\":\"es\"");
+  });
+
+  it("logs out and clears local session state", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("brewpilot.token", "stored-token");
+    localStorage.setItem("brewpilot.user", JSON.stringify(testUser));
+    installDashboardOnlyMocks();
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Logout" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument();
+    });
+    expect(localStorage.getItem("brewpilot.token")).toBeNull();
+    expect(localStorage.getItem("brewpilot.user")).toBeNull();
   });
 });
