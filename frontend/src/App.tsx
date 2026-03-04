@@ -6,6 +6,7 @@ import { AuthPanel, type AuthSubmitPayload } from "./components/AuthPanel";
 import { BrewPlannerPanel } from "./components/BrewPlannerPanel";
 import { BrewSummaryPanel } from "./components/BrewSummaryPanel";
 import { DataManagerPanel } from "./components/DataManagerPanel";
+import { FermentationPanel } from "./components/FermentationPanel";
 import { InventoryPanel } from "./components/InventoryPanel";
 import { NotesPanel } from "./components/NotesPanel";
 import { OnboardingPanel } from "./components/OnboardingPanel";
@@ -21,6 +22,9 @@ import type {
   BrewPlanApplyResult,
   EquipmentProfile,
   EquipmentProfileCreate,
+  FermentationReading,
+  FermentationReadingCreate,
+  FermentationTrend,
   IngredientProfile,
   IngredientProfileCreate,
   InventoryItem,
@@ -55,6 +59,8 @@ function App() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlertResponse>({ count: 0, items: [] });
+  const [fermentationReadings, setFermentationReadings] = useState<FermentationReading[]>([]);
+  const [fermentationTrend, setFermentationTrend] = useState<FermentationTrend | null>(null);
 
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
@@ -83,6 +89,17 @@ function App() {
     }
     void loadDashboard();
   }, [token]);
+
+  useEffect(() => {
+    if (!token || selectedBatchId === null) {
+      setFermentationReadings([]);
+      setFermentationTrend(null);
+      return;
+    }
+    setFermentationReadings([]);
+    setFermentationTrend(null);
+    void loadFermentationData(selectedBatchId, { silent: true });
+  }, [selectedBatchId, token]);
 
   useEffect(() => {
     if (!brewPlan?.timer_plan.length || !timer.running) {
@@ -152,9 +169,12 @@ function App() {
         items: sortInventoryItems(lowStock.items),
       });
 
-      if (batchList.length > 0 && selectedBatchId === null) {
-        setSelectedBatchId(batchList[0].id);
-      }
+      setSelectedBatchId((previous) => {
+        if (previous !== null && batchList.some((batch) => batch.id === previous)) {
+          return previous;
+        }
+        return batchList[0]?.id ?? null;
+      });
       return true;
     } catch (err) {
       if (!handleUnauthorized(err)) {
@@ -215,6 +235,9 @@ function App() {
     setRecipes([]);
     setInventoryItems([]);
     setLowStockAlerts({ count: 0, items: [] });
+    setFermentationReadings([]);
+    setFermentationTrend(null);
+    setSelectedBatchId(null);
     setBrewPlan(null);
     setApplyResult(null);
     setTimer({ stepIndex: 0, running: false, remainingSeconds: 0 });
@@ -472,6 +495,82 @@ function App() {
       }
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadFermentationData(batchId: number, options: { silent?: boolean } = {}): Promise<boolean> {
+    if (!token) {
+      return false;
+    }
+
+    const { silent = false } = options;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+    }
+
+    try {
+      const [readingList, trend] = await Promise.all([
+        apiRequest<FermentationReading[]>(`/batches/${batchId}/readings`, {}, token),
+        apiRequest<FermentationTrend>(`/batches/${batchId}/fermentation/trend`, {}, token),
+      ]);
+      setFermentationReadings(sortFermentationReadings(readingList));
+      setFermentationTrend(trend);
+      return true;
+    } catch (err) {
+      if (!handleUnauthorized(err) && !silent) {
+        setError(toMessage(err));
+      }
+      return false;
+    } finally {
+      if (!silent) {
+        setLoading(false);
+      }
+    }
+  }
+
+  async function onCreateFermentationReading(payload: FermentationReadingCreate): Promise<boolean> {
+    if (!token || selectedBatchId === null) {
+      return false;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const created = await apiRequest<FermentationReading>(
+        `/batches/${selectedBatchId}/readings`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        token,
+      );
+      setFermentationReadings((previous) => sortFermentationReadings([...previous, created]));
+
+      const trend = await apiRequest<FermentationTrend>(`/batches/${selectedBatchId}/fermentation/trend`, {}, token);
+      setFermentationTrend(trend);
+      setSuccess("Fermentation reading logged.");
+      return true;
+    } catch (err) {
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onRefreshFermentation(): Promise<void> {
+    if (selectedBatchId === null) {
+      return;
+    }
+    const loaded = await loadFermentationData(selectedBatchId);
+    if (loaded) {
+      setSuccess("Fermentation data refreshed.");
     }
   }
 
@@ -756,6 +855,23 @@ function App() {
             }}
           />
 
+          <FermentationPanel
+            loading={loading}
+            tr={tr}
+            batches={batches}
+            selectedBatchId={selectedBatchId}
+            readings={fermentationReadings}
+            trend={fermentationTrend}
+            onSelectedBatchChange={setSelectedBatchId}
+            onCreateReading={onCreateFermentationReading}
+            onRefresh={onRefreshFermentation}
+            onJumpToDataManager={onJumpToDataManager}
+            onClientError={(message) => {
+              setSuccess(null);
+              setError(message);
+            }}
+          />
+
           <TimerPanel
             tr={tr}
             brewPlan={brewPlan}
@@ -845,6 +961,16 @@ function sortIngredientProfiles(items: IngredientProfile[]): IngredientProfile[]
 
 function sortInventoryItems(items: InventoryItem[]): InventoryItem[] {
   return [...items].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function sortFermentationReadings(items: FermentationReading[]): FermentationReading[] {
+  return [...items].sort((left, right) => {
+    const timeCmp = left.recorded_at.localeCompare(right.recorded_at);
+    if (timeCmp !== 0) {
+      return timeCmp;
+    }
+    return left.id - right.id;
+  });
 }
 
 function toMessage(error: unknown): string {
