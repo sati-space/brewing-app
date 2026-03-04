@@ -6,6 +6,7 @@ import { AuthPanel, type AuthSubmitPayload } from "./components/AuthPanel";
 import { BrewPlannerPanel } from "./components/BrewPlannerPanel";
 import { BrewSummaryPanel } from "./components/BrewSummaryPanel";
 import { DataManagerPanel } from "./components/DataManagerPanel";
+import { InventoryPanel } from "./components/InventoryPanel";
 import { NotesPanel } from "./components/NotesPanel";
 import { OnboardingPanel } from "./components/OnboardingPanel";
 import { PreferencesPanel } from "./components/PreferencesPanel";
@@ -22,7 +23,10 @@ import type {
   EquipmentProfileCreate,
   IngredientProfile,
   IngredientProfileCreate,
+  InventoryItem,
+  InventoryItemCreate,
   Language,
+  LowStockAlertResponse,
   Recipe,
   RecipeCreate,
   TemperatureUnit,
@@ -49,6 +53,8 @@ function App() {
   const [waterProfiles, setWaterProfiles] = useState<WaterProfile[]>([]);
   const [ingredientProfiles, setIngredientProfiles] = useState<IngredientProfile[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlertResponse>({ count: 0, items: [] });
 
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
@@ -120,14 +126,17 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const [freshUser, batchList, equipmentList, waterList, ingredientList, recipeList] = await Promise.all([
-        apiRequest<User>("/auth/me", {}, token),
-        apiRequest<Batch[]>("/batches", {}, token),
-        apiRequest<EquipmentProfile[]>("/equipment", {}, token),
-        apiRequest<WaterProfile[]>("/water-profiles", {}, token),
-        apiRequest<IngredientProfile[]>("/ingredients", {}, token),
-        apiRequest<Recipe[]>("/recipes", {}, token),
-      ]);
+      const [freshUser, batchList, equipmentList, waterList, ingredientList, recipeList, inventoryList, lowStock] =
+        await Promise.all([
+          apiRequest<User>("/auth/me", {}, token),
+          apiRequest<Batch[]>("/batches", {}, token),
+          apiRequest<EquipmentProfile[]>("/equipment", {}, token),
+          apiRequest<WaterProfile[]>("/water-profiles", {}, token),
+          apiRequest<IngredientProfile[]>("/ingredients", {}, token),
+          apiRequest<Recipe[]>("/recipes", {}, token),
+          apiRequest<InventoryItem[]>("/inventory", {}, token),
+          apiRequest<LowStockAlertResponse>("/inventory/alerts/low-stock", {}, token),
+        ]);
 
       setUser(freshUser);
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(freshUser));
@@ -137,6 +146,11 @@ function App() {
       setWaterProfiles(waterList);
       setIngredientProfiles(sortIngredientProfiles(ingredientList));
       setRecipes(recipeList);
+      setInventoryItems(sortInventoryItems(inventoryList));
+      setLowStockAlerts({
+        count: lowStock.count,
+        items: sortInventoryItems(lowStock.items),
+      });
 
       if (batchList.length > 0 && selectedBatchId === null) {
         setSelectedBatchId(batchList[0].id);
@@ -199,6 +213,8 @@ function App() {
     setWaterProfiles([]);
     setIngredientProfiles([]);
     setRecipes([]);
+    setInventoryItems([]);
+    setLowStockAlerts({ count: 0, items: [] });
     setBrewPlan(null);
     setApplyResult(null);
     setTimer({ stepIndex: 0, running: false, remainingSeconds: 0 });
@@ -385,6 +401,75 @@ function App() {
         setError(toMessage(err));
       }
       return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onCreateInventoryItem(payload: InventoryItemCreate): Promise<boolean> {
+    if (!token) {
+      return false;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const created = await apiRequest<InventoryItem>(
+        "/inventory",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        token,
+      );
+      setInventoryItems((previous) => sortInventoryItems([...previous, created]));
+      setLowStockAlerts((previous) => {
+        const nextItems = created.is_low_stock
+          ? sortInventoryItems([...previous.items.filter((item) => item.id !== created.id), created])
+          : previous.items.filter((item) => item.id !== created.id);
+        return {
+          count: nextItems.length,
+          items: nextItems,
+        };
+      });
+      setSuccess("Inventory item created.");
+      return true;
+    } catch (err) {
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onRefreshInventory(): Promise<void> {
+    if (!token) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const [items, alerts] = await Promise.all([
+        apiRequest<InventoryItem[]>("/inventory", {}, token),
+        apiRequest<LowStockAlertResponse>("/inventory/alerts/low-stock", {}, token),
+      ]);
+      setInventoryItems(sortInventoryItems(items));
+      setLowStockAlerts({
+        count: alerts.count,
+        items: sortInventoryItems(alerts.items),
+      });
+      setSuccess("Inventory refreshed.");
+    } catch (err) {
+      if (!handleUnauthorized(err)) {
+        setError(toMessage(err));
+      }
     } finally {
       setLoading(false);
     }
@@ -658,6 +743,19 @@ function App() {
             }}
           />
 
+          <InventoryPanel
+            loading={loading}
+            tr={tr}
+            items={inventoryItems}
+            alerts={lowStockAlerts}
+            onCreateItem={onCreateInventoryItem}
+            onRefresh={onRefreshInventory}
+            onClientError={(message) => {
+              setSuccess(null);
+              setError(message);
+            }}
+          />
+
           <TimerPanel
             tr={tr}
             brewPlan={brewPlan}
@@ -743,6 +841,10 @@ function sortIngredientProfiles(items: IngredientProfile[]): IngredientProfile[]
     }
     return left.name.localeCompare(right.name);
   });
+}
+
+function sortInventoryItems(items: InventoryItem[]): InventoryItem[] {
+  return [...items].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function toMessage(error: unknown): string {

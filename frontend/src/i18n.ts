@@ -98,6 +98,13 @@ export type TranslationKey =
   | "settings"
   | "close"
   | "session_expired"
+  | "inventory"
+  | "new_inventory_item"
+  | "low_stock_alerts"
+  | "show_low_stock_only"
+  | "low_stock_threshold"
+  | "quantity"
+  | "low_stock"
   | "ai_assistant"
   | "optimize_recipe"
   | "diagnose_fermentation"
@@ -206,6 +213,13 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     settings: "Settings",
     close: "Close",
     session_expired: "Session expired. Please log in again.",
+    inventory: "Inventory",
+    new_inventory_item: "New Inventory Item",
+    low_stock_alerts: "Low Stock Alerts",
+    show_low_stock_only: "Show Low-Stock Only",
+    low_stock_threshold: "Low Stock Threshold",
+    quantity: "Quantity",
+    low_stock: "Low stock",
     ai_assistant: "AI Assistant",
     optimize_recipe: "Optimize Recipe",
     diagnose_fermentation: "Diagnose Fermentation",
@@ -311,6 +325,13 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     settings: "Ajustes",
     close: "Cerrar",
     session_expired: "La sesion expiro. Inicia sesion nuevamente.",
+    inventory: "Inventario",
+    new_inventory_item: "Nuevo item de inventario",
+    low_stock_alerts: "Alertas de stock bajo",
+    show_low_stock_only: "Mostrar solo stock bajo",
+    low_stock_threshold: "Umbral de stock bajo",
+    quantity: "Cantidad",
+    low_stock: "Stock bajo",
     ai_assistant: "Asistente IA",
     optimize_recipe: "Optimizar receta",
     diagnose_fermentation: "Diagnosticar fermentacion",
