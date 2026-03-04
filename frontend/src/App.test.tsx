@@ -80,6 +80,12 @@ function installAuthAndDashboardMocks(): void {
     if (path === "/recipes") {
       return Promise.resolve([]);
     }
+    if (path === "/inventory") {
+      return Promise.resolve([]);
+    }
+    if (path === "/inventory/alerts/low-stock") {
+      return Promise.resolve({ count: 0, items: [] });
+    }
     return Promise.reject(new Error(`Unexpected path: ${path}`));
   });
 }
@@ -105,6 +111,12 @@ function installDashboardOnlyMocks(): void {
     if (path === "/recipes") {
       return Promise.resolve([]);
     }
+    if (path === "/inventory") {
+      return Promise.resolve([]);
+    }
+    if (path === "/inventory/alerts/low-stock") {
+      return Promise.resolve({ count: 0, items: [] });
+    }
     return Promise.reject(new Error(`Unexpected path: ${path}`));
   });
 }
@@ -129,6 +141,12 @@ function installDashboardMocksForToken(expectedToken: string): void {
     }
     if (path === "/recipes") {
       return Promise.resolve([]);
+    }
+    if (path === "/inventory") {
+      return Promise.resolve([]);
+    }
+    if (path === "/inventory/alerts/low-stock") {
+      return Promise.resolve({ count: 0, items: [] });
     }
     if (path === "/auth/me/preferences") {
       expect(token).toBe(expectedToken);
@@ -176,6 +194,58 @@ function installDashboardWithIngredientCreateMocks(expectedToken: string): void 
     if (path === "/recipes") {
       return Promise.resolve([]);
     }
+    if (path === "/inventory") {
+      return Promise.resolve([]);
+    }
+    if (path === "/inventory/alerts/low-stock") {
+      return Promise.resolve({ count: 0, items: [] });
+    }
+    return Promise.reject(new Error(`Unexpected path: ${path}`));
+  });
+}
+
+function installDashboardWithInventoryCreateMocks(expectedToken: string): void {
+  mockApiRequest.mockImplementation((path, options, token) => {
+    if (path === "/auth/me") {
+      expect(token).toBe(expectedToken);
+      return Promise.resolve(testUser);
+    }
+    if (path === "/batches") {
+      return Promise.resolve([]);
+    }
+    if (path === "/equipment") {
+      return Promise.resolve([]);
+    }
+    if (path === "/water-profiles") {
+      return Promise.resolve([]);
+    }
+    if (path === "/ingredients") {
+      return Promise.resolve([]);
+    }
+    if (path === "/recipes") {
+      return Promise.resolve([]);
+    }
+    if (path === "/inventory") {
+      if (options?.method === "POST") {
+        const body = JSON.parse(String(options.body)) as {
+          name: string;
+          ingredient_type: string;
+          quantity: number;
+          unit: string;
+          low_stock_threshold: number;
+        };
+        return Promise.resolve({
+          id: 81,
+          ...body,
+          updated_at: "2026-02-01T00:00:00Z",
+          is_low_stock: body.quantity <= body.low_stock_threshold,
+        });
+      }
+      return Promise.resolve([]);
+    }
+    if (path === "/inventory/alerts/low-stock") {
+      return Promise.resolve({ count: 0, items: [] });
+    }
     return Promise.reject(new Error(`Unexpected path: ${path}`));
   });
 }
@@ -200,6 +270,12 @@ function installDashboardWithAIMocks(expectedToken: string): void {
     }
     if (path === "/recipes") {
       return Promise.resolve([aiRecipe]);
+    }
+    if (path === "/inventory") {
+      return Promise.resolve([]);
+    }
+    if (path === "/inventory/alerts/low-stock") {
+      return Promise.resolve({ count: 0, items: [] });
     }
     if (path === "/ai/recipe-optimize") {
       expect(token).toBe(expectedToken);
@@ -266,6 +342,12 @@ function installDashboardWithAIErrorMocks(expectedToken: string): void {
     if (path === "/recipes") {
       return Promise.resolve([aiRecipe]);
     }
+    if (path === "/inventory") {
+      return Promise.resolve([]);
+    }
+    if (path === "/inventory/alerts/low-stock") {
+      return Promise.resolve({ count: 0, items: [] });
+    }
     if (path === "/ai/recipe-optimize") {
       return Promise.reject(new APIError(422, "Invalid gravity input"));
     }
@@ -279,8 +361,11 @@ function installExpiredTokenMocks(expectedToken: string): void {
       expect(token).toBe(expectedToken);
       return Promise.reject(new APIError(401, "Invalid token"));
     }
-    if (path === "/batches" || path === "/equipment" || path === "/water-profiles" || path === "/ingredients" || path === "/recipes") {
+    if (path === "/batches" || path === "/equipment" || path === "/water-profiles" || path === "/ingredients" || path === "/recipes" || path === "/inventory") {
       return Promise.resolve([]);
+    }
+    if (path === "/inventory/alerts/low-stock") {
+      return Promise.resolve({ count: 0, items: [] });
     }
     return Promise.reject(new Error(`Unexpected path: ${path}`));
   });
@@ -328,6 +413,8 @@ describe("App integration", () => {
     expect(mockApiRequest).toHaveBeenCalledWith("/water-profiles", {}, "token-123");
     expect(mockApiRequest).toHaveBeenCalledWith("/ingredients", {}, "token-123");
     expect(mockApiRequest).toHaveBeenCalledWith("/recipes", {}, "token-123");
+    expect(mockApiRequest).toHaveBeenCalledWith("/inventory", {}, "token-123");
+    expect(mockApiRequest).toHaveBeenCalledWith("/inventory/alerts/low-stock", {}, "token-123");
   });
 
   it("shows API errors when registration fails", async () => {
@@ -495,6 +582,60 @@ describe("App integration", () => {
           ingredient_type: "hop",
           default_unit: "oz",
           notes: "pine and citrus",
+        }),
+      },
+      "stored-token",
+    );
+  });
+
+  it("creates inventory item and updates low-stock presentation", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("brewpilot.token", "stored-token");
+    localStorage.setItem("brewpilot.user", JSON.stringify(testUser));
+    installDashboardWithInventoryCreateMocks("stored-token");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Inventory" })).toBeInTheDocument();
+    });
+
+    const inventoryHeading = screen.getByRole("heading", { name: "Inventory" });
+    const inventoryPanel = inventoryHeading.closest("section");
+    if (!inventoryPanel) {
+      throw new Error("Inventory panel not found");
+    }
+    const panel = within(inventoryPanel);
+
+    await user.type(panel.getByLabelText("Ingredient Name"), "Citra");
+    await user.clear(panel.getByLabelText("Ingredient Type"));
+    await user.type(panel.getByLabelText("Ingredient Type"), "hop");
+    await user.clear(panel.getByLabelText("Unit"));
+    await user.type(panel.getByLabelText("Unit"), "g");
+    await user.clear(panel.getByLabelText("Quantity"));
+    await user.type(panel.getByLabelText("Quantity"), "2");
+    await user.clear(panel.getByLabelText("Low Stock Threshold"));
+    await user.type(panel.getByLabelText("Low Stock Threshold"), "5");
+    await user.click(panel.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Inventory item created.")).toBeInTheDocument();
+      expect(panel.getByText(/Low Stock Alerts:/)).toBeInTheDocument();
+      expect(panel.getAllByText("Citra").length).toBeGreaterThan(0);
+      expect(panel.getByText("Low stock")).toBeInTheDocument();
+    });
+
+    expect(panel.getByLabelText("Ingredient Name")).toHaveValue("");
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      "/inventory",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Citra",
+          ingredient_type: "hop",
+          quantity: 2,
+          unit: "g",
+          low_stock_threshold: 5,
         }),
       },
       "stored-token",

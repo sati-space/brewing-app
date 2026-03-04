@@ -82,6 +82,30 @@ export interface IngredientProfileCreate {
   notes: string;
 }
 
+export interface InventoryItem {
+  id: number;
+  name: string;
+  ingredient_type: string;
+  quantity: number;
+  unit: string;
+  low_stock_threshold: number;
+  updated_at: string;
+  is_low_stock: boolean;
+}
+
+export interface InventoryItemCreate {
+  name: string;
+  ingredient_type: string;
+  quantity: number;
+  unit: string;
+  low_stock_threshold: number;
+}
+
+export interface LowStockAlertResponse {
+  count: number;
+  items: InventoryItem[];
+}
+
 export interface EquipmentProfileCreate {
   name: string;
   batch_volume_liters: number;
