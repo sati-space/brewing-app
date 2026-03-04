@@ -106,6 +106,48 @@ export interface LowStockAlertResponse {
   items: InventoryItem[];
 }
 
+export interface FermentationReading {
+  id: number;
+  batch_id: number;
+  recorded_at: string;
+  gravity: number | null;
+  temp_c: number | null;
+  ph: number | null;
+  notes: string;
+}
+
+export interface FermentationReadingCreate {
+  recorded_at?: string;
+  gravity: number | null;
+  temp_c: number | null;
+  ph: number | null;
+  notes: string;
+}
+
+export interface FermentationTrendPoint {
+  id: number;
+  recorded_at: string;
+  gravity: number | null;
+  temp_c: number | null;
+  ph: number | null;
+}
+
+export interface FermentationTrend {
+  batch_id: number;
+  reading_count: number;
+  first_recorded_at: string | null;
+  latest_recorded_at: string | null;
+  latest_gravity: number | null;
+  latest_temp_c: number | null;
+  latest_ph: number | null;
+  gravity_drop: number | null;
+  average_hourly_gravity_drop: number | null;
+  plateau_risk: boolean;
+  temperature_warning: boolean;
+  alerts: string[];
+  readings: FermentationTrendPoint[];
+}
+
 export interface EquipmentProfileCreate {
   name: string;
   batch_volume_liters: number;

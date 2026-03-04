@@ -110,7 +110,25 @@ export type TranslationKey =
   | "diagnose_fermentation"
   | "ai_latest_result"
   | "ai_source"
-  | "ai_no_result";
+  | "ai_no_result"
+  | "fermentation_tracker"
+  | "log_reading"
+  | "recorded_at"
+  | "gravity"
+  | "temperature_c"
+  | "ph"
+  | "fermentation_trend"
+  | "reading_count"
+  | "latest_gravity"
+  | "latest_temp_c"
+  | "latest_ph"
+  | "gravity_drop"
+  | "avg_hourly_drop"
+  | "plateau_risk"
+  | "temperature_warning"
+  | "fermentation_alerts"
+  | "recent_readings"
+  | "no_readings_logged";
 
 export type Translator = (key: TranslationKey) => string;
 
@@ -226,6 +244,24 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     ai_latest_result: "Latest AI Result",
     ai_source: "Source",
     ai_no_result: "No AI analysis yet.",
+    fermentation_tracker: "Fermentation Tracker",
+    log_reading: "Log Reading",
+    recorded_at: "Recorded At",
+    gravity: "Gravity",
+    temperature_c: "Temperature (C)",
+    ph: "pH",
+    fermentation_trend: "Fermentation Trend",
+    reading_count: "Reading Count",
+    latest_gravity: "Latest Gravity",
+    latest_temp_c: "Latest Temp (C)",
+    latest_ph: "Latest pH",
+    gravity_drop: "Gravity Drop",
+    avg_hourly_drop: "Avg Hourly Gravity Drop",
+    plateau_risk: "Plateau Risk",
+    temperature_warning: "Temperature Warning",
+    fermentation_alerts: "Fermentation Alerts",
+    recent_readings: "Recent Readings",
+    no_readings_logged: "No fermentation readings logged yet.",
   },
   es: {
     app_title: "BrewPilot",
@@ -338,6 +374,24 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     ai_latest_result: "Ultimo resultado de IA",
     ai_source: "Fuente",
     ai_no_result: "Aun no hay analisis de IA.",
+    fermentation_tracker: "Seguimiento de fermentacion",
+    log_reading: "Registrar lectura",
+    recorded_at: "Registrado en",
+    gravity: "Densidad",
+    temperature_c: "Temperatura (C)",
+    ph: "pH",
+    fermentation_trend: "Tendencia de fermentacion",
+    reading_count: "Cantidad de lecturas",
+    latest_gravity: "Ultima densidad",
+    latest_temp_c: "Ultima temp (C)",
+    latest_ph: "Ultimo pH",
+    gravity_drop: "Caida de densidad",
+    avg_hourly_drop: "Caida horaria promedio",
+    plateau_risk: "Riesgo de meseta",
+    temperature_warning: "Alerta de temperatura",
+    fermentation_alerts: "Alertas de fermentacion",
+    recent_readings: "Lecturas recientes",
+    no_readings_logged: "Aun no hay lecturas de fermentacion.",
   },
 };
 

@@ -250,6 +250,95 @@ function installDashboardWithInventoryCreateMocks(expectedToken: string): void {
   });
 }
 
+function installDashboardWithFermentationCreateMocks(expectedToken: string): void {
+  const readings: Array<{
+    id: number;
+    batch_id: number;
+    recorded_at: string;
+    gravity: number | null;
+    temp_c: number | null;
+    ph: number | null;
+    notes: string;
+  }> = [];
+
+  mockApiRequest.mockImplementation((path, options, token) => {
+    if (path === "/auth/me") {
+      expect(token).toBe(expectedToken);
+      return Promise.resolve(testUser);
+    }
+    if (path === "/batches") {
+      return Promise.resolve([aiBatch]);
+    }
+    if (path === "/equipment") {
+      return Promise.resolve([]);
+    }
+    if (path === "/water-profiles") {
+      return Promise.resolve([]);
+    }
+    if (path === "/ingredients") {
+      return Promise.resolve([]);
+    }
+    if (path === "/recipes") {
+      return Promise.resolve([aiRecipe]);
+    }
+    if (path === "/inventory") {
+      return Promise.resolve([]);
+    }
+    if (path === "/inventory/alerts/low-stock") {
+      return Promise.resolve({ count: 0, items: [] });
+    }
+    if (path === `/batches/${aiBatch.id}/readings`) {
+      if (options?.method === "POST") {
+        const body = JSON.parse(String(options.body)) as {
+          recorded_at?: string;
+          gravity: number | null;
+          temp_c: number | null;
+          ph: number | null;
+          notes: string;
+        };
+
+        const created = {
+          id: 301 + readings.length,
+          batch_id: aiBatch.id,
+          recorded_at: body.recorded_at ?? "2026-02-02T12:00:00Z",
+          gravity: body.gravity,
+          temp_c: body.temp_c,
+          ph: body.ph,
+          notes: body.notes,
+        };
+        readings.push(created);
+        return Promise.resolve(created);
+      }
+      return Promise.resolve([...readings]);
+    }
+    if (path === `/batches/${aiBatch.id}/fermentation/trend`) {
+      const latest = readings.length ? readings[readings.length - 1] : null;
+      return Promise.resolve({
+        batch_id: aiBatch.id,
+        reading_count: readings.length,
+        first_recorded_at: readings.length ? readings[0].recorded_at : null,
+        latest_recorded_at: latest?.recorded_at ?? null,
+        latest_gravity: latest?.gravity ?? null,
+        latest_temp_c: latest?.temp_c ?? null,
+        latest_ph: latest?.ph ?? null,
+        gravity_drop: null,
+        average_hourly_gravity_drop: null,
+        plateau_risk: false,
+        temperature_warning: false,
+        alerts: readings.length ? ["Fermentation trend appears stable."] : ["No fermentation readings logged yet."],
+        readings: readings.map((item) => ({
+          id: item.id,
+          recorded_at: item.recorded_at,
+          gravity: item.gravity,
+          temp_c: item.temp_c,
+          ph: item.ph,
+        })),
+      });
+    }
+    return Promise.reject(new Error(`Unexpected path: ${path}`));
+  });
+}
+
 function installDashboardWithAIMocks(expectedToken: string): void {
   mockApiRequest.mockImplementation((path, options, token) => {
     if (path === "/auth/me") {
@@ -276,6 +365,26 @@ function installDashboardWithAIMocks(expectedToken: string): void {
     }
     if (path === "/inventory/alerts/low-stock") {
       return Promise.resolve({ count: 0, items: [] });
+    }
+    if (path === `/batches/${aiBatch.id}/readings`) {
+      return Promise.resolve([]);
+    }
+    if (path === `/batches/${aiBatch.id}/fermentation/trend`) {
+      return Promise.resolve({
+        batch_id: aiBatch.id,
+        reading_count: 0,
+        first_recorded_at: null,
+        latest_recorded_at: null,
+        latest_gravity: null,
+        latest_temp_c: null,
+        latest_ph: null,
+        gravity_drop: null,
+        average_hourly_gravity_drop: null,
+        plateau_risk: false,
+        temperature_warning: false,
+        alerts: ["No fermentation readings logged yet."],
+        readings: [],
+      });
     }
     if (path === "/ai/recipe-optimize") {
       expect(token).toBe(expectedToken);
@@ -347,6 +456,26 @@ function installDashboardWithAIErrorMocks(expectedToken: string): void {
     }
     if (path === "/inventory/alerts/low-stock") {
       return Promise.resolve({ count: 0, items: [] });
+    }
+    if (path === `/batches/${aiBatch.id}/readings`) {
+      return Promise.resolve([]);
+    }
+    if (path === `/batches/${aiBatch.id}/fermentation/trend`) {
+      return Promise.resolve({
+        batch_id: aiBatch.id,
+        reading_count: 0,
+        first_recorded_at: null,
+        latest_recorded_at: null,
+        latest_gravity: null,
+        latest_temp_c: null,
+        latest_ph: null,
+        gravity_drop: null,
+        average_hourly_gravity_drop: null,
+        plateau_risk: false,
+        temperature_warning: false,
+        alerts: ["No fermentation readings logged yet."],
+        readings: [],
+      });
     }
     if (path === "/ai/recipe-optimize") {
       return Promise.reject(new APIError(422, "Invalid gravity input"));
@@ -640,6 +769,58 @@ describe("App integration", () => {
       },
       "stored-token",
     );
+  });
+
+  it("logs fermentation readings and refreshes trend details", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("brewpilot.token", "stored-token");
+    localStorage.setItem("brewpilot.user", JSON.stringify(testUser));
+    installDashboardWithFermentationCreateMocks("stored-token");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Fermentation Tracker" })).toBeInTheDocument();
+    });
+
+    const heading = screen.getByRole("heading", { name: "Fermentation Tracker" });
+    const panelElement = heading.closest("section");
+    if (!panelElement) {
+      throw new Error("Fermentation panel not found");
+    }
+    const panel = within(panelElement);
+
+    await user.type(panel.getByLabelText("Gravity"), "1.05");
+    await user.type(panel.getByLabelText("Temperature (C)"), "19");
+    await user.type(panel.getByLabelText("pH"), "5.2");
+    await user.type(panel.getByLabelText("Notes"), "Day 2 sample");
+    await user.click(panel.getByRole("button", { name: "Log Reading" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Fermentation reading logged.")).toBeInTheDocument();
+      expect(panel.getByText(/Fermentation trend appears stable\./)).toBeInTheDocument();
+      expect(screen.getByText(/Day 2 sample/)).toBeInTheDocument();
+      expect(panel.getByText("1.050")).toBeInTheDocument();
+    });
+
+    const readingCreateCalls = mockApiRequest.mock.calls.filter(
+      ([path, options]) => path === "/batches/21/readings" && options?.method === "POST",
+    );
+    expect(readingCreateCalls).toHaveLength(1);
+
+    const requestBody = JSON.parse(String(readingCreateCalls[0][1]?.body)) as {
+      gravity: number | null;
+      temp_c: number | null;
+      ph: number | null;
+      notes: string;
+    };
+
+    expect(requestBody).toMatchObject({
+      gravity: 1.05,
+      temp_c: 19,
+      ph: 5.2,
+      notes: "Day 2 sample",
+    });
   });
 
   it("shows client validation errors for invalid equipment form values", async () => {
